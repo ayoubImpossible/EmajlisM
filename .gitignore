@@ -1,0 +1,19 @@
+node_modules/
+
+# Secrets — ne jamais committer
+.env
+.env.*
+!.env.example
+firebase-service-account.json
+*.pem
+*.key
+
+uploads/
+*.log
+dist/
+
+# Les intermediaires publics de certs/ ne sont pas des secrets : ils completent
+# la chaine TLS que le serveur n'envoie pas. Voir certs/README.md.
+!certs/*.pem
+!certs/README.md
+
