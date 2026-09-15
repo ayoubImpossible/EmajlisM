@@ -3,6 +3,11 @@
 # dependencies
 node_modules/
 
+# Secrets – never commit
+.env.local
+google-services.json
+GoogleService-Info.plist
+
 # Expo
 .expo/
 dist/
@@ -39,3 +44,8 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# .env porte l'adresse du serveur, propre a chaque poste. .env.example est versionne.
+.env
+!.env.example
+
