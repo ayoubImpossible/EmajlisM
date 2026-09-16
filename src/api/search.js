@@ -16,5 +16,9 @@ export const search = async (keyword, page = 1, params = {}) => {
 
 export const searchTypes = async () => {
   const { data } = await api.get('/feed/search/types');
-  return data.results || [];
+  // API wraps in { results: [...] }. Each item has:
+  //   key  → try class, value, id, type, name (field varies by HumHub version)
+  //   label → try label, title, name, fr (same)
+  const raw = data?.results || data?.items || (Array.isArray(data) ? data : []);
+  return raw;
 };

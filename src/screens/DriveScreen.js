@@ -20,7 +20,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../config/theme';
 import { useLang } from '../context/LangContext';
 import { browse } from '../api/drive';
-import { downloadAuthenticatedFile } from '../utils/files';
+import { openFileInApp, downloadAuthenticatedFile } from '../utils/files';
 import { messageFor } from '../api/client';
 import { formatDate } from '../utils/dates';
 import { Screen, AppBar, Banner, EmptyState, SkeletonList } from '../components/ui';
@@ -49,7 +49,8 @@ export default function DriveScreen({ route, navigation }) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
-  const [downloading, setDownloading] = useState(null);
+  const [downloading, setDownloading] = useState(null);  // file being downloaded
+  const [opening, setOpening] = useState(null);           // file being opened
   const [progress, setProgress] = useState(0);
 
   const load = useCallback(async (fid, { refresh = false } = {}) => {
@@ -74,8 +75,23 @@ export default function DriveScreen({ route, navigation }) {
     else navigation.goBack();
   };
 
+  // Tap on file row → open in-app viewer
   const openFile = async (file) => {
-    if (downloading) return;
+    if (opening || downloading) return;
+    setOpening(file.id);
+    const res = await openFileInApp(file);
+    setOpening(null);
+    if (!res.ok) { setError(res.reason); return; }
+    navigation.navigate('WebView', {
+      url: res.url,
+      headers: res.headers,
+      title: file.title || file.file_name || 'Fichier',
+    });
+  };
+
+  // Tap on download icon → save/share
+  const downloadFile = async (file) => {
+    if (downloading || opening) return;
     setDownloading(file.id);
     setProgress(0);
     const res = await downloadAuthenticatedFile(file, setProgress);
@@ -116,7 +132,9 @@ export default function DriveScreen({ route, navigation }) {
 
     const m = MIME_META[item.mime_type] || { icon: 'document-outline', tone: 'textMuted' };
     const tint = colors[m.tone] || colors.textMuted;
-    const busy = downloading === item.id;
+    const busy = downloading === item.id || opening === item.id;
+    const isDownloading = downloading === item.id;
+    const isOpening = opening === item.id;
 
     return (
       <TouchableOpacity
@@ -127,10 +145,12 @@ export default function DriveScreen({ route, navigation }) {
         ]}
         onPress={() => openFile(item)}
         activeOpacity={0.85}
-        disabled={!!downloading}
+        disabled={busy}
       >
         <View style={[styles.iconWrap, { backgroundColor: `${tint}22`, borderRadius: radius.sm }]}>
-          <Ionicons name={m.icon} size={20} color={tint} />
+          {isOpening
+            ? <ActivityIndicator size="small" color={tint} />
+            : <Ionicons name={m.icon} size={20} color={tint} />}
         </View>
         <View style={{ flex: 1 }}>
           <Text style={[T.bodyStrong, { fontSize: 13.5 }, dirStyle]} numberOfLines={2}>
@@ -139,15 +159,33 @@ export default function DriveScreen({ route, navigation }) {
           <Text style={T.caption}>
             {[item.human_size, formatDate(item.created_at, lang)].filter(Boolean).join(' · ')}
           </Text>
-          {busy ? (
+          {isDownloading ? (
             <View style={[styles.track, { backgroundColor: colors.borderLight }]}>
               <View style={[styles.fill, { width: `${Math.round(progress * 100)}%`, backgroundColor: colors.primary }]} />
             </View>
           ) : null}
         </View>
-        {busy
-          ? <ActivityIndicator size="small" color={colors.primary} />
-          : <Ionicons name="cloud-download-outline" size={19} color={colors.textMuted} />}
+        {/* Download icon — separate from open action */}
+        <TouchableOpacity
+          onPress={() => openFile(item)}
+          disabled={busy}
+          hitSlop={10}
+          style={{ padding: 4 }}
+        >
+          {isOpening
+            ? <ActivityIndicator size="small" color={colors.primary} />
+            : <Ionicons name="eye-outline" size={19} color={colors.textMuted} />}
+        </TouchableOpacity>
+        <TouchableOpacity
+          onPress={() => downloadFile(item)}
+          disabled={busy}
+          hitSlop={10}
+          style={{ padding: 4 }}
+        >
+          {isDownloading
+            ? <ActivityIndicator size="small" color={colors.primary} />
+            : <Ionicons name="cloud-download-outline" size={19} color={colors.textMuted} />}
+        </TouchableOpacity>
       </TouchableOpacity>
     );
   };

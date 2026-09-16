@@ -119,29 +119,32 @@ export default function DemandeFormScreen({ route, navigation }) {
   // ── Confirmation ──────────────────────────────────────────────────────────
   if (done) {
     return (
-      <View style={[styles.bg, styles.centerAll]}>
-        <Ionicons name="checkmark-circle" size={64} color={colors.success} />
-        <Text style={styles.doneTitle}>{t('Demande envoyée', 'تم إرسال الطلب')}</Text>
-        <Text style={styles.doneText}>
-          {typeof done === 'number'
-            ? t(`Votre demande n° ${done} a été enregistrée.`, `تم تسجيل طلبك رقم ${done}.`)
-            : t('Votre demande a été enregistrée.', 'تم تسجيل طلبك.')}
-        </Text>
-        <Button
-          title={t('Voir mes demandes', 'عرض طلباتي')}
-          onPress={() => navigation.replace('MesDemandes')}
-          full={false}
-        />
-        <TouchableOpacity onPress={() => navigation.popToTop()}>
-          <Text style={styles.linkText}>{t('Retour aux services', 'العودة إلى الخدمات')}</Text>
-        </TouchableOpacity>
-      </View>
+      <Screen>
+        <View style={[styles.bg, styles.centerAll]}>
+          <Ionicons name="checkmark-circle" size={64} color={colors.success} />
+          <Text style={styles.doneTitle}>{t('Demande envoyée', 'تم إرسال الطلب')}</Text>
+          <Text style={styles.doneText}>
+            {typeof done === 'number'
+              ? t(`Votre demande n° ${done} a été enregistrée.`, `تم تسجيل طلبك رقم ${done}.`)
+              : t('Votre demande a été enregistrée.', 'تم تسجيل طلبك.')}
+          </Text>
+          <Button
+            title={t('Voir mes demandes', 'عرض طلباتي')}
+            onPress={() => navigation.replace('MesDemandes')}
+            full={false}
+          />
+          <TouchableOpacity onPress={() => navigation.popToTop()}>
+            <Text style={styles.linkText}>{t('Retour aux services', 'العودة إلى الخدمات')}</Text>
+          </TouchableOpacity>
+        </View>
+      </Screen>
     );
   }
 
   return (
-    <KeyboardAvoidingView style={styles.bg} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <AppBar title={t('Nouvelle demande', 'طلب جديد')} onBack={() => navigation.goBack()} />
+    <Screen>
+      <KeyboardAvoidingView style={styles.bg} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <AppBar title={t('Nouvelle demande', 'طلب جديد')} onBack={() => navigation.goBack()} />
 
       {error ? (
         <View style={{ paddingHorizontal: spacing.md, paddingTop: spacing.sm }}>
@@ -290,7 +293,8 @@ export default function DemandeFormScreen({ route, navigation }) {
           ) : null}
         </ScrollView>
       )}
-    </KeyboardAvoidingView>
+      </KeyboardAvoidingView>
+    </Screen>
   );
 }
 

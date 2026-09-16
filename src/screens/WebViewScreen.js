@@ -23,7 +23,7 @@ import { useLang } from '../context/LangContext';
 import { Screen, AppBar, Banner, Button } from '../components/ui';
 
 export default function WebViewScreen({ route, navigation }) {
-  const { url, title = '' } = route.params || {};
+  const { url, title = '', headers: sourceHeaders } = route.params || {};
   const { colors, spacing, layout, type: T } = useTheme();
   const { t } = useLang();
 
@@ -33,8 +33,9 @@ export default function WebViewScreen({ route, navigation }) {
   const [error, setError] = useState(null);
   const [current, setCurrent] = useState(url);
 
+  const isLocalFile = /^file:\/\//i.test(String(url));
   let host = '';
-  try { host = new URL(String(url)).host; } catch (_) { host = ''; }
+  try { if (!isLocalFile) host = new URL(String(url)).host; } catch (_) { host = ''; }
 
   if (!url) {
     return (
@@ -55,7 +56,7 @@ export default function WebViewScreen({ route, navigation }) {
         onBack={() => navigation.goBack()}
         actions={[
           { icon: 'refresh-outline', label: t('Recharger', 'إعادة التحميل'), onPress: () => { setError(null); ref.current?.reload(); } },
-          { icon: 'open-outline', label: t('Ouvrir dans le navigateur', 'فتح في المتصفح'), onPress: () => Linking.openURL(current || url).catch(() => {}) },
+          ...(!isLocalFile ? [{ icon: 'open-outline', label: t('Ouvrir dans le navigateur', 'فتح في المتصفح'), onPress: () => Linking.openURL(current || url).catch(() => {}) }] : []),
         ]}
       />
 
@@ -80,7 +81,7 @@ export default function WebViewScreen({ route, navigation }) {
       <View style={{ flex: 1 }}>
         <WebView
           ref={ref}
-          source={{ uri: url }}
+          source={{ uri: url, headers: sourceHeaders || undefined }}
           onLoadStart={() => setLoading(true)}
           onLoadEnd={() => setLoading(false)}
           onLoadProgress={({ nativeEvent }) => setProgress(nativeEvent.progress)}
@@ -91,9 +92,10 @@ export default function WebViewScreen({ route, navigation }) {
           onHttpError={({ nativeEvent }) =>
             setError(`${t('Le serveur a répondu', 'أجاب الخادم')} ${nativeEvent?.statusCode}`)
           }
-          // Les liens vers un autre domaine partent dans le navigateur : la vue
-          // intégrée reste sur le site d'origine.
+          // Les liens vers un autre domaine partent dans le navigateur.
+          // Pour les fichiers locaux (file://) on laisse la WebView gérer.
           onShouldStartLoadWithRequest={(req) => {
+            if (isLocalFile || /^file:\/\//i.test(req.url)) return true;
             try {
               const reqHost = new URL(req.url).host;
               if (reqHost === host) return true;

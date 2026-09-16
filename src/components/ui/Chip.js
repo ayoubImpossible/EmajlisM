@@ -9,9 +9,10 @@ import { Text, TouchableOpacity, ScrollView, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../config/theme';
 
-export default function Chip({ label, active, onPress, icon, color }) {
+export default function Chip({ label, active, onPress, icon, color, count }) {
   const { colors, radius } = useTheme();
   const accent = color || colors.primary;
+  const textColor = active ? colors.onPrimary : colors.textSecondary;
 
   return (
     <TouchableOpacity
@@ -29,14 +30,22 @@ export default function Chip({ label, active, onPress, icon, color }) {
       ]}
     >
       {icon ? (
-        <Ionicons name={icon} size={13} color={active ? colors.onPrimary : colors.textSecondary} />
+        <Ionicons name={icon} size={13} color={textColor} />
       ) : null}
-      <Text
-        numberOfLines={1}
-        style={[styles.text, { color: active ? colors.onPrimary : colors.textSecondary }]}
-      >
+      <Text numberOfLines={1} style={[styles.text, { color: textColor }]}>
         {label}
       </Text>
+      {/* Count badge inside chip — e.g. "Tout 14" */}
+      {count != null && count > 0 ? (
+        <View style={[
+          styles.countBadge,
+          { backgroundColor: active ? 'rgba(255,255,255,0.25)' : `${accent}22` },
+        ]}>
+          <Text style={[styles.countText, { color: active ? '#fff' : accent }]}>
+            {count > 99 ? '99+' : count}
+          </Text>
+        </View>
+      ) : null}
     </TouchableOpacity>
   );
 }
@@ -65,4 +74,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   text: { fontSize: 12, fontWeight: '700', maxWidth: 170 },
+  countBadge: {
+    minWidth: 18, height: 18, borderRadius: 9,
+    alignItems: 'center', justifyContent: 'center',
+    paddingHorizontal: 4,
+  },
+  countText: { fontSize: 10, fontWeight: '800' },
 });

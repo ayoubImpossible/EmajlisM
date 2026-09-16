@@ -1,48 +1,47 @@
-/**
- * Documents — onglet absent de l'application, alors que le Drive est la partie
- * la plus utilisée de la plateforme (plusieurs milliers de fichiers).
- *
- * Deux entrées : les documents récents, tous espaces confondus, téléchargeables
- * d'un geste ; et la liste des espaces, pour parcourir leur arborescence.
- * Les espaces viennent du serveur : aucune liste écrite dans l'application.
+﻿/**
+ * Documents — onglet Drive : fichiers récents + navigation par espace.
  */
 
 import React, { useState, useCallback, useEffect } from 'react';
-import { View, Text, FlatList, TouchableOpacity, StyleSheet, ActivityIndicator, RefreshControl } from 'react-native';
+import {
+  View, Text, FlatList, TouchableOpacity,
+  StyleSheet, ActivityIndicator, RefreshControl,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 import { useTheme } from '../config/theme';
 import { useLang } from '../context/LangContext';
 import api, { messageFor } from '../api/client';
 import { getSpaces } from '../api/spaces';
-import { downloadAuthenticatedFile } from '../utils/files';
+import { openFileInApp, downloadAuthenticatedFile } from '../utils/files';
 import { formatDate } from '../utils/dates';
 import { Screen, AppBar, Chip, ChipRow, Banner, EmptyState, SkeletonList } from '../components/ui';
 
 const DRIVE_FILE_MODEL = 'humhub\\modules\\driveManager\\models\\DriveFile';
 
 const MIME_META = {
-  'application/pdf': { icon: 'document-text-outline', tone: 'danger' },
-  'application/msword': { icon: 'document-outline', tone: 'info' },
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': { icon: 'document-outline', tone: 'info' },
-  'application/vnd.ms-excel': { icon: 'grid-outline', tone: 'success' },
-  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': { icon: 'grid-outline', tone: 'success' },
-  'application/vnd.ms-powerpoint': { icon: 'easel-outline', tone: 'warning' },
-  'application/vnd.openxmlformats-officedocument.presentationml.presentation': { icon: 'easel-outline', tone: 'warning' },
+  'application/pdf':                                                             { icon: 'document-text-outline', tone: 'danger' },
+  'application/msword':                                                          { icon: 'document-outline',      tone: 'info' },
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document':    { icon: 'document-outline',      tone: 'info' },
+  'application/vnd.ms-excel':                                                    { icon: 'grid-outline',          tone: 'success' },
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet':          { icon: 'grid-outline',          tone: 'success' },
+  'application/vnd.ms-powerpoint':                                               { icon: 'easel-outline',         tone: 'warning' },
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation':  { icon: 'easel-outline',         tone: 'warning' },
 };
 
 export default function DocumentsScreen({ navigation }) {
   const { colors, spacing, radius, layout, type: T } = useTheme();
   const { t, lang, dirStyle, forwardIcon } = useLang();
 
-  const [tab, setTab] = useState('recents');
-  const [recents, setRecents] = useState([]);
-  const [spaces, setSpaces] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [tab, setTab]             = useState('recents');
+  const [recents, setRecents]     = useState([]);
+  const [spaces, setSpaces]       = useState([]);
+  const [loading, setLoading]     = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState(null);
+  const [error, setError]         = useState(null);
   const [downloading, setDownloading] = useState(null);
-  const [progress, setProgress] = useState(0);
+  const [opening, setOpening]     = useState(null);
+  const [progress, setProgress]   = useState(0);
 
   const load = useCallback(async ({ refresh = false } = {}) => {
     if (refresh) setRefreshing(true); else setLoading(true);
@@ -63,8 +62,26 @@ export default function DocumentsScreen({ navigation }) {
 
   useEffect(() => { load(); }, [load]);
 
+  // Tap row → open in-app viewer
+  const openFile = async (item) => {
+    if (opening || downloading) return;
+    const e = item.extra || {};
+    setOpening(item.id);
+    const res = await openFileInApp(
+      { api_download_url: e.downloadPath, title: item.title, mime_type: e.mimeType },
+    );
+    setOpening(null);
+    if (!res.ok) { setError(res.reason); return; }
+    navigation.navigate('WebView', {
+      url: res.url,
+      headers: res.headers,
+      title: item.title || 'Fichier',
+    });
+  };
+
+  // Tap download icon → save/share
   const download = async (item) => {
-    if (downloading) return;
+    if (downloading || opening) return;
     const e = item.extra || {};
     setDownloading(item.id);
     setProgress(0);
@@ -80,47 +97,91 @@ export default function DocumentsScreen({ navigation }) {
     const e = item.extra || {};
     const m = MIME_META[e.mimeType] || { icon: 'document-outline', tone: 'textMuted' };
     const tint = colors[m.tone] || colors.textMuted;
-    const busy = downloading === item.id;
+    const busy        = downloading === item.id || opening === item.id;
+    const isOpening   = opening === item.id;
+    const isDownloading = downloading === item.id;
+
     return (
       <TouchableOpacity
-        style={[styles.row, { backgroundColor: colors.bgCard, paddingHorizontal: layout.gutter, borderBottomColor: colors.borderLight }]}
-        onPress={() => download(item)}
-        disabled={!!downloading}
+        style={[styles.row, {
+          backgroundColor: colors.bgCard,
+          paddingHorizontal: layout.gutter,
+          borderBottomColor: colors.borderLight,
+        }]}
+        onPress={() => openFile(item)}
+        disabled={busy}
         activeOpacity={0.85}
       >
+        {/* File type icon */}
         <View style={[styles.iconWrap, { backgroundColor: `${tint}22`, borderRadius: radius.sm }]}>
-          <Ionicons name={m.icon} size={20} color={tint} />
+          {isOpening
+            ? <ActivityIndicator size="small" color={tint} />
+            : <Ionicons name={m.icon} size={20} color={tint} />}
         </View>
+
+        {/* Title + meta */}
         <View style={{ flex: 1 }}>
-          <Text style={[T.bodyStrong, { fontSize: 13.5 }, dirStyle]} numberOfLines={2}>{item.title}</Text>
+          <Text style={[T.bodyStrong, { fontSize: 13.5 }, dirStyle]} numberOfLines={2}>
+            {item.title}
+          </Text>
           <Text style={T.caption} numberOfLines={1}>
             {[e.humanSize, item.author?.name, formatDate(item.createdAt, lang)].filter(Boolean).join(' · ')}
           </Text>
-          {busy ? (
+          {isDownloading ? (
             <View style={[styles.track, { backgroundColor: colors.borderLight }]}>
               <View style={[styles.fill, { width: `${Math.round(progress * 100)}%`, backgroundColor: colors.primary }]} />
             </View>
           ) : null}
         </View>
-        {busy
-          ? <ActivityIndicator size="small" color={colors.primary} />
-          : <Ionicons name="cloud-download-outline" size={19} color={colors.textMuted} />}
+
+        {/* Open icon */}
+        <TouchableOpacity
+          onPress={() => openFile(item)}
+          disabled={busy}
+          hitSlop={10}
+          style={styles.actionBtn}
+        >
+          {isOpening
+            ? <ActivityIndicator size="small" color={colors.primary} />
+            : <Ionicons name="eye-outline" size={19} color={colors.textMuted} />}
+        </TouchableOpacity>
+
+        {/* Download icon */}
+        <TouchableOpacity
+          onPress={() => download(item)}
+          disabled={busy}
+          hitSlop={10}
+          style={styles.actionBtn}
+        >
+          {isDownloading
+            ? <ActivityIndicator size="small" color={colors.primary} />
+            : <Ionicons name="cloud-download-outline" size={19} color={colors.textMuted} />}
+        </TouchableOpacity>
       </TouchableOpacity>
     );
   };
 
   const renderSpace = ({ item }) => (
     <TouchableOpacity
-      style={[styles.row, { backgroundColor: colors.bgCard, paddingHorizontal: layout.gutter, borderBottomColor: colors.borderLight }]}
+      style={[styles.row, {
+        backgroundColor: colors.bgCard,
+        paddingHorizontal: layout.gutter,
+        borderBottomColor: colors.borderLight,
+      }]}
       activeOpacity={0.85}
-      onPress={() => navigation.navigate('Drive', { containerId: item.contentcontainer_id, spaceName: item.name })}
+      onPress={() => navigation.navigate('Drive', {
+        containerId: item.contentcontainer_id,
+        spaceName: item.name,
+      })}
     >
       <View style={[styles.iconWrap, { backgroundColor: colors.primarySoft, borderRadius: radius.sm }]}>
         <Ionicons name="folder-open-outline" size={20} color={colors.primary} />
       </View>
       <View style={{ flex: 1 }}>
         <Text style={[T.bodyStrong, { fontSize: 13.5 }, dirStyle]} numberOfLines={2}>{item.name}</Text>
-        {item.description ? <Text style={T.caption} numberOfLines={1}>{item.description}</Text> : null}
+        {item.description
+          ? <Text style={T.caption} numberOfLines={1}>{item.description}</Text>
+          : null}
       </View>
       <Ionicons name={forwardIcon} size={16} color={colors.border} />
     </TouchableOpacity>
@@ -131,7 +192,7 @@ export default function DocumentsScreen({ navigation }) {
       <AppBar title={t('Documents', 'الوثائق')} large />
 
       <ChipRow>
-        <Chip label={t('Récents', 'الأحدث')} icon="time-outline" active={tab === 'recents'} onPress={() => setTab('recents')} />
+        <Chip label={t('Récents', 'الأحدث')} icon="time-outline"  active={tab === 'recents'} onPress={() => setTab('recents')} />
         <Chip label={t('Par espace', 'حسب الفضاء')} icon="grid-outline" active={tab === 'espaces'} onPress={() => setTab('espaces')} />
       </ChipRow>
 
@@ -176,10 +237,11 @@ export default function DocumentsScreen({ navigation }) {
 
 const styles = StyleSheet.create({
   row: {
-    flexDirection: 'row', alignItems: 'center', gap: 12,
+    flexDirection: 'row', alignItems: 'center', gap: 10,
     paddingVertical: 12, borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  iconWrap: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+  iconWrap:  { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+  actionBtn: { padding: 4 },
   track: { height: 3, borderRadius: 2, marginTop: 6, overflow: 'hidden' },
-  fill: { height: 3 },
+  fill:  { height: 3 },
 });

@@ -1,31 +1,39 @@
 /**
- * Téléchargement de fichiers.
+ * Téléchargement et ouverture de fichiers.
  *
- * Le problème corrigé : DriveScreen lisait le jeton, puis appelait
- * `Linking.openURL(url)` sans s'en servir. Le navigateur du téléphone n'a pas la
- * session de l'application, donc le serveur répondait 401 et l'utilisateur
- * voyait une page d'erreur — ou, sur un fichier public, un téléchargement qui
- * marchait « parfois », ce qui est pire.
+ * Deux actions distinctes :
  *
- * Ici, le fichier est récupéré par l'application, avec son en-tête
- * d'autorisation, puis remis au système (feuille de partage / ouvrir avec).
+ *  openFileInApp(file, onProgress)
+ *    → Télécharge le fichier avec authentification, puis l'ouvre DANS l'application.
+ *      PDF     : expo-web-browser (visionneuse intégrée iOS/Android).
+ *      Images  : expo-web-browser.
+ *      Autres  : feuille de partage système (« Ouvrir avec »).
+ *
+ *  downloadAuthenticatedFile(file, onProgress)
+ *    → Télécharge le fichier avec authentification, puis propose à l'utilisateur
+ *      de l'enregistrer / partager via la feuille de partage système.
+ *      C'est l'action du bouton « Télécharger ».
  */
 
 import * as Sharing from 'expo-sharing';
-import * as WebBrowser from 'expo-web-browser';
-import { API_URL } from '../config/env';
+import { API_URL, BASE_URL } from '../config/env';
 import { authHeaders } from '../api/client';
 
-// expo-file-system a changé d'API en SDK 54. L'ancienne, qui accepte des
-// en-têtes sur le téléchargement, reste disponible sous /legacy.
+// expo-file-system — utilisé uniquement pour cacheDirectory, writeAsStringAsync
+// et EncodingType. On n'utilise plus createDownloadResumable : son gestionnaire
+// de téléchargement natif (NSURLSession / DownloadManager) supprime silencieusement
+// les en-têtes HTTP personnalisés sur certaines versions du SDK, ce qui fait
+// échouer toute requête authentifiée sans réponse HTTP. On télécharge désormais
+// via fetch() (moteur JS, en-têtes toujours honorés) et on écrit le corps en
+// base64 avec writeAsStringAsync.
 let FS;
 try {
-  // eslint-disable-next-line global-require
   FS = require('expo-file-system/legacy');
 } catch (_) {
-  // eslint-disable-next-line global-require
   FS = require('expo-file-system');
 }
+
+// ─── helpers ────────────────────────────────────────────────────────────────
 
 /** Retire d'un nom de fichier tout ce qui gênerait le système de fichiers. */
 function safeName(name, fallback = 'document') {
@@ -36,36 +44,70 @@ function safeName(name, fallback = 'document') {
   return cleaned || fallback;
 }
 
-/** Extension déduite du type MIME, quand le nom n'en porte pas. */
+/** Extension déduite du type MIME quand le nom n'en porte pas. */
 const EXT_BY_MIME = {
-  'application/pdf': 'pdf',
-  'application/msword': 'doc',
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
-  'application/vnd.ms-excel': 'xls',
-  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'xlsx',
-  'application/vnd.ms-powerpoint': 'ppt',
-  'application/vnd.openxmlformats-officedocument.presentationml.presentation': 'pptx',
-  'image/jpeg': 'jpg',
-  'image/png': 'png',
-  'text/plain': 'txt',
+  'application/pdf':                                                              'pdf',
+  'application/msword':                                                           'doc',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document':     'docx',
+  'application/vnd.ms-excel':                                                     'xls',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet':           'xlsx',
+  'application/vnd.ms-powerpoint':                                                'ppt',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation':   'pptx',
+  'image/jpeg':  'jpg',
+  'image/png':   'png',
+  'image/gif':   'gif',
+  'image/webp':  'webp',
+  'text/plain':  'txt',
   'application/zip': 'zip',
 };
 
+/** UTI iOS pour guider la visionneuse native lors de shareAsync. */
+function mimeToUTI(mimeType) {
+  const map = {
+    'application/pdf': 'com.adobe.pdf',
+    'image/jpeg': 'public.jpeg',
+    'image/png': 'public.png',
+    'image/gif': 'com.compuserve.gif',
+    'image/webp': 'public.webp',
+    'application/msword': 'com.microsoft.word.doc',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'org.openxmlformats.wordprocessingml.document',
+    'application/vnd.ms-excel': 'com.microsoft.excel.xls',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'org.openxmlformats.spreadsheetml.sheet',
+    'application/vnd.ms-powerpoint': 'com.microsoft.powerpoint.ppt',
+    'application/vnd.openxmlformats-officedocument.presentationml.presentation': 'org.openxmlformats.presentationml.presentation',
+    'text/plain': 'public.plain-text',
+  };
+  return map[mimeType] || undefined;
+}
+
+/** Types MIME qui peuvent s'ouvrir directement dans expo-web-browser. */
+const VIEWABLE_MIME = new Set([
+  'application/pdf',
+  'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml',
+  'text/plain', 'text/html',
+]);
+
+function isViewable(mimeType) {
+  return VIEWABLE_MIME.has(mimeType) || /^image\//i.test(mimeType || '');
+}
+
+// ─── core download ──────────────────────────────────────────────────────────
+
 /**
- * Télécharge un fichier protégé et le propose à l'utilisateur.
- *
- * @param {object}   file        élément renvoyé par l'API Drive
- * @param {string}   file.api_download_url  chemin relatif fourni par le serveur
- * @param {string}   file.title  nom affiché
- * @param {string}   file.mime_type
- * @param {function} [onProgress] reçoit un nombre entre 0 et 1
- * @returns {Promise<{ok: boolean, uri?: string, reason?: string}>}
+ * Télécharge un fichier protégé dans le cache de l'application.
+ * @returns {Promise<{ok: boolean, uri?: string, status?: number, reason?: string}>}
  */
-export async function downloadAuthenticatedFile(file, onProgress) {
-  const relative = file?.api_download_url || (file?.id ? `/drive/file/${file.id}/download` : null);
+async function fetchToCache(file, onProgress) {
+  const relative = file?.api_download_url || (file?.id ? `/api/drive/file/${file.id}/download` : null);
   if (!relative) return { ok: false, reason: 'Aucune adresse de téléchargement pour ce fichier.' };
 
-  const url = /^https?:\/\//i.test(relative) ? relative : `${API_URL}${relative}`;
+  // api_download_url commence déjà par /api/... → on colle sur BASE_URL (sans /api).
+  // Un chemin relatif sans /api (repli interne) → on colle sur API_URL.
+  const url = /^https?:\/\//i.test(relative)
+    ? relative
+    : relative.startsWith('/api/')
+      ? `${BASE_URL}${relative}`
+      : `${API_URL}${relative}`;
   const headers = await authHeaders();
   if (!headers.Authorization) return { ok: false, reason: 'Session expirée. Reconnectez-vous.' };
 
@@ -78,44 +120,94 @@ export async function downloadAuthenticatedFile(file, onProgress) {
   const target = `${FS.cacheDirectory}${Date.now()}-${encodeURIComponent(name)}`;
 
   try {
-    const task = FS.createDownloadResumable(
-      url,
-      target,
-      { headers },
-      onProgress
-        ? (p) => {
-            const total = p.totalBytesExpectedToWrite;
-            if (total > 0) onProgress(p.totalBytesWritten / total);
-          }
-        : undefined,
-    );
+    // fetch() utilise le moteur JS — les en-têtes Authorization sont toujours
+    // transmis, contrairement au gestionnaire natif de createDownloadResumable.
+    const response = await fetch(url, { headers });
 
-    const result = await task.downloadAsync();
-    if (!result) return { ok: false, reason: 'Téléchargement interrompu.' };
+    if (response.status === 401) return { ok: false, reason: 'Session expirée. Reconnectez-vous.' };
+    if (response.status === 403) return { ok: false, reason: "Vous n'avez pas accès à ce fichier." };
+    if (response.status === 404) return { ok: false, reason: 'Fichier introuvable sur le serveur.' };
+    if (response.status >= 400) return { ok: false, reason: `Le serveur a refusé le téléchargement (${response.status}).` };
+    if (!response.ok) return { ok: false, reason: 'Téléchargement interrompu.' };
 
-    if (result.status === 401) return { ok: false, reason: 'Session expirée. Reconnectez-vous.' };
-    if (result.status === 403) return { ok: false, reason: "Vous n'avez pas accès à ce fichier." };
-    if (result.status === 404) return { ok: false, reason: 'Fichier introuvable sur le serveur.' };
-    if (result.status >= 400) return { ok: false, reason: `Le serveur a refusé le téléchargement (${result.status}).` };
+    // Lecture du corps en base64 puis écriture dans le cache de l'application.
+    const blob = await response.blob();
+    const base64 = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        // reader.result = "data:<mime>;base64,<data>" — on garde uniquement <data>
+        const result = reader.result;
+        const comma = result.indexOf(',');
+        resolve(comma !== -1 ? result.slice(comma + 1) : result);
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
 
+    await FS.writeAsStringAsync(target, base64, {
+      encoding: FS.EncodingType.Base64,
+    });
+
+    if (onProgress) onProgress(1);
+    return { ok: true, uri: target, name };
+  } catch (err) {
+    return { ok: false, reason: err?.message || 'Serveur injoignable. Vérifiez votre connexion.' };
+  }
+}
+
+// ─── public API ─────────────────────────────────────────────────────────────
+
+/**
+ * Retourne l'URL absolue et les headers d'auth pour ouvrir un fichier
+ * directement dans la WebView (sans passer par le cache local).
+ * Appelé quand l'utilisateur tape sur l'icône œil.
+ */
+export async function openFileInApp(file) {
+  const relative = file?.api_download_url || (file?.id ? `/api/drive/file/${file.id}/download` : null);
+  if (!relative) return { ok: false, reason: 'Aucune adresse de téléchargement pour ce fichier.' };
+
+  const url = /^https?:\/\//i.test(relative)
+    ? relative
+    : relative.startsWith('/api/')
+      ? `${BASE_URL}${relative}`
+      : `${API_URL}${relative}`;
+
+  const headers = await authHeaders();
+  if (!headers.Authorization) return { ok: false, reason: 'Session expirée. Reconnectez-vous.' };
+
+  // On ajoute ?inline=1 pour que le serveur envoie Content-Disposition: inline
+  // (affichage dans la WebView plutôt que téléchargement).
+  const viewUrl = url.includes('?') ? `${url}&inline=1` : `${url}?inline=1`;
+
+  return { ok: true, url: viewUrl, headers };
+}
+
+/**
+ * Télécharge un fichier et propose à l'utilisateur de l'enregistrer / partager.
+ * C'est l'action du bouton « Télécharger » (icône nuage).
+ *
+ * Appelé quand l'utilisateur tape sur l'icône de téléchargement.
+ */
+export async function downloadAuthenticatedFile(file, onProgress) {
+  const fetched = await fetchToCache(file, onProgress);
+  if (!fetched.ok) return fetched;
+
+  try {
     if (await Sharing.isAvailableAsync()) {
-      await Sharing.shareAsync(result.uri, {
+      await Sharing.shareAsync(fetched.uri, {
         mimeType: file.mime_type || undefined,
-        dialogTitle: name,
-        UTI: file.mime_type === 'application/pdf' ? 'com.adobe.pdf' : undefined,
+        dialogTitle: fetched.name,
+        UTI: mimeToUTI(file.mime_type),
       });
-      return { ok: true, uri: result.uri };
+      return { ok: true, uri: fetched.uri };
     }
-
-    // Pas de feuille de partage (web) : on ouvre le fichier local.
-    await WebBrowser.openBrowserAsync(result.uri);
-    return { ok: true, uri: result.uri };
+    return { ok: false, reason: 'Le partage de fichiers n\'est pas disponible sur cet appareil.' };
   } catch (err) {
     return { ok: false, reason: err?.message || 'Le téléchargement a échoué.' };
   }
 }
 
-/** « 1.18 Mo » — le serveur envoie déjà `human_size`, ceci n'est qu'un repli. */
+/** « 1.18 Mo » — repli si le serveur ne renvoie pas human_size. */
 export function humanSize(bytes) {
   const n = Number(bytes);
   if (!Number.isFinite(n) || n <= 0) return '';

@@ -81,11 +81,17 @@ export default function HomeScreen({ navigation }) {
   }, []));
 
   const firstName = user?.firstname || user?.display_name?.split(' ')[0] || t('Membre', 'عضو');
+  const fullName  = user?.display_name || user?.firstname || firstName;
 
   const filters = [
     { key: null, label: t('Tout', 'الكل') },
     ...types
-      .map((ty) => ({ key: ty.class || ty.value || ty.id, label: ty.label || ty.name || '' }))
+      .map((ty) => ({
+        // HumHub may use: class, value, id, type, model, name
+        key: ty.class || ty.value || ty.id || ty.type || ty.model || ty.name || null,
+        // HumHub may use: label, title, name, fr, display_name
+        label: ty.label || ty.title || ty.name || ty.fr || ty.display_name || '',
+      }))
       .filter((x) => x.key && x.label),
   ];
 
@@ -95,10 +101,12 @@ export default function HomeScreen({ navigation }) {
     <Screen>
       <AppBar
         title={firstName}
-        subtitle={t('Bonjour,', 'مرحباً،')}
+        subtitle={t('Bonjour, bonne journée', 'مرحباً، يوماً سعيداً')}
+        avatarUri={user?.image_url || null}
+        avatarOnline
         actions={[
-          { icon: 'calendar-outline', onPress: () => navigation.navigate('Calendrier'), label: t('Agenda', 'الأجندة') },
-          { icon: 'search-outline', onPress: () => navigation.navigate('Search'), label: t('Rechercher', 'بحث') },
+          { icon: 'calendar-outline',     onPress: () => navigation.navigate('Calendrier'),   label: t('Agenda', 'الأجندة') },
+          { icon: 'search-outline',        onPress: () => navigation.navigate('Search'),        label: t('Rechercher', 'بحث') },
           { icon: 'notifications-outline', onPress: () => navigation.navigate('Notifications'), badge: unseen, label: t('Notifications', 'الإشعارات') },
         ]}
       />
@@ -110,6 +118,7 @@ export default function HomeScreen({ navigation }) {
             label={f.label}
             active={filter === f.key}
             onPress={() => setFilter(f.key)}
+            count={f.key === null && unseen > 0 ? unseen : undefined}
           />
         ))}
       </ChipRow>
@@ -140,6 +149,7 @@ export default function HomeScreen({ navigation }) {
                 lang={lang}
                 isRTL={isRTL}
                 onPress={(it) => navigation.navigate('ContentDetail', { item: it })}
+                onCommentPress={(it) => navigation.navigate('ContentDetail', { item: it, openComments: true })}
               />
             </View>
           )}

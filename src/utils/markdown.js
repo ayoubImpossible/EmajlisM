@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Markdown -> HTML, volontairement minimal.
  *
  * HumHub renvoie `bodyFormat: 'markdown'` pour les publications et `'html'`
@@ -139,12 +139,25 @@ export function markdownToHtml(markdown) {
 }
 
 /**
+ * Auto-linkifies bare http(s) URLs in HTML that are not already inside <a> tags.
+ * Uses a negative lookbehind for = ' " to skip URLs inside HTML attributes.
+ */
+function autoLink(html) {
+  return html.replace(
+    /(?<!['"=])(https?:\/\/[^\s<>"']+)/g,
+    (url) => `<a href="${url}">${url}</a>`,
+  );
+}
+
+/**
  * Rend n'importe quel corps en HTML, selon `bodyFormat`.
  * Un format inconnu est traité comme du texte : échappé, jamais interprété.
+ * Les URLs brutes sont auto-transformées en liens cliquables.
  */
 export function bodyToHtml(body, bodyFormat) {
   if (!body) return '';
-  if (bodyFormat === 'html') return body;
+  if (bodyFormat === 'html') return autoLink(body);
   if (bodyFormat === 'markdown') return markdownToHtml(body);
-  return `<p>${escapeHtml(body).replace(/\n/g, '<br />')}</p>`;
+  // plain text — escape first, then wrap, then linkify
+  return autoLink(`<p>${escapeHtml(body).replace(/\n/g, '<br />')}</p>`);
 }
