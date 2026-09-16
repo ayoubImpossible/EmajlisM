@@ -296,11 +296,21 @@ async function fetchPreview(type, objectId, token) {
       const f = await tryGet(`/cfiles/file/${objectId}`, token);
       if (!f) return null;
       const file = f.file || f;
+      // Use the file's own id (not the content objectId) — HumHub's
+      // /file/download?id= expects the file record id, not the content id.
+      const fileId = file.id || file.guid || objectId;
+      console.log(`[cfile enrich] objectId=${objectId} → fileId=${fileId}`);
       return {
         title: file.title || file.file_name || file.name || 'Fichier',
         excerpt: toPlainText(file.description) || humanSize(file.size),
         imageUrl: null,
-        extra: { mimeType: file.mime_type, size: file.size, humanSize: humanSize(file.size) },
+        extra: {
+          mimeType: file.mime_type,
+          size: file.size,
+          humanSize: humanSize(file.size),
+          filename: file.file_name || file.name,
+          downloadPath: `/api/cfiles/file/${fileId}/download`,
+        },
       };
     }
 
@@ -437,6 +447,28 @@ async function enrichItems(rawItems, token) {
     }
 
     if (item.objectId == null) return;
+
+    // cfile: the file record IS the raw item itself. HumHub already provides
+    // the file metadata in raw.files[0] — no separate fetch needed, and
+    // /cfiles/file/:id does not exist as a REST endpoint on this installation.
+    if (item.type === 'cfile') {
+      const f = (raw.files || [])[0];
+      if (f) {
+        const proxyPath = `/api/cfiles/file/${f.id}/download`;
+        item.title = f.file_name || f.title || item.title || 'Fichier';
+        item.excerpt = humanSize(f.size) || '';
+        item.extra = {
+          filename: f.file_name || f.name,
+          mimeType: f.mime_type,
+          size: f.size,
+          humanSize: humanSize(f.size),
+          downloadPath: proxyPath,
+        };
+      } else {
+        item.extra = { downloadPath: `/api/cfiles/file/${item.objectId}/download` };
+      }
+      return;
+    }
 
     const key = `${item.objectModel}:${item.objectId}`;
     const preview = await previewCache.getOrSet(key, async () => {

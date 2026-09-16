@@ -109,6 +109,10 @@ app.use('/api/auth', authRoutes);
 app.use('/api/feed', feedRoutes);
 app.use('/api/content', contentRoutes);
 app.use('/api/drive', driveRoutes);
+// cfiles download proxy — pièces jointes des publications (module cfiles ≠ Drive)
+const { requireAuth: requireAuthMiddleware } = require('./middleware/humhubAuth');
+const driveCtrl = require('./controllers/drive.controller');
+app.get('/api/cfiles/file/:id/download', requireAuthMiddleware, driveCtrl.downloadCfile);
 app.use('/api/spaces', spaceRoutes);
 app.use('/api/comments', commentRoutes);
 app.use('/api/likes', likeRoutes);

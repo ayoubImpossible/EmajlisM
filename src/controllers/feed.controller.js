@@ -1,17 +1,6 @@
 ﻿'use strict';
 
-/**
- * Flux, recherche, espaces, notifications, calendrier.
- *
- * RÃ©Ã©crit le 10/09/2026 sur le contrat RÃ‰EL de l'API HumHub, vÃ©rifiÃ© par appel :
- * un Ã©lÃ©ment de /emajlis/feed contient exactement
- *     { id, metadata, comments, likes, topics, files }
- * L'ancien mapper lisait item.post, item.calendarEntry, item.driveFile,
- * item.majlissPost â€" aucun de ces champs n'existe. Le titre de chaque carte
- * tombait donc sur metadata.url.
- *
- * Le titre et l'extrait sont dÃ©sormais fournis par services/enrich.js.
- */
+
 
 const { http, asUser } = require('../services/humhub');
 const { enrichItems } = require('../services/enrich');
@@ -78,7 +67,10 @@ exports.search = async (req, res, next) => {
 exports.searchTypes = async (req, res, next) => {
   try {
     const { data } = await http.get('/emajlis/search/types', asUser(req.humhubToken));
-    res.json(data || []);
+    const list = Array.isArray(data)
+      ? data
+      : (data?.results || data?.items || data?.types || []);
+    res.json({ results: list });
   } catch (err) { next(err); }
 };
 
@@ -297,7 +289,7 @@ exports.getMockNotifications = async (req, res, next) => {
         id: '2',
         class: 'like',
         output: '<strong>Utilisateur</strong> a aimé votre publication',
-        seen: true,
+        seen: true, 
         created_at: new Date(Date.now() - 7200000).toISOString(),
         originator: {
           id: '2',

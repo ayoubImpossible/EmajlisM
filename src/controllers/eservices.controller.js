@@ -57,6 +57,19 @@ exports.mesDemandes = async (req, res, next) => {
     const { data } = await http.get('/emajlis/eservice/requests', {
       ...asUser(req.humhubToken), params,
     });
+
+    // HumHub returns all requests regardless of who calls — filter to current
+    // user only. req.user.id is set by requireAuth middleware.
+    const userId = req.user?.id;
+    if (userId && Array.isArray(data?.results)) {
+      data.results = data.results.filter((r) => {
+        // Match against known user id fields HumHub may use
+        const rid = r.user_id ?? r.userId ?? r.user?.id ?? r.created_by?.id ?? null;
+        return rid == null || String(rid) === String(userId);
+      });
+      data.total = data.results.length;
+    }
+
     res.json(data);
   } catch (err) {
     if (err.response?.status === 400) return res.status(400).json(err.response.data);
@@ -64,7 +77,22 @@ exports.mesDemandes = async (req, res, next) => {
   }
 };
 
-exports.adminList = exports.mesDemandes;
+// ── GET /api/eservices/admin ──────────────────────────────────────────────────
+exports.adminList = async (req, res, next) => {
+  // Admin view: no user filter — returns all users' requests
+  const params = { ...req.query };
+  if (params.status) params.status = normalizeStatus(params.status);
+
+  try {
+    const { data } = await http.get('/emajlis/eservice/requests', {
+      ...asUser(req.humhubToken), params,
+    });
+    res.json(data);
+  } catch (err) {
+    if (err.response?.status === 400) return res.status(400).json(err.response.data);
+    next(err);
+  }
+};
 
 // ── GET /api/eservices/request/:id ────────────────────────────────────────────
 exports.getOne = async (req, res, next) => {

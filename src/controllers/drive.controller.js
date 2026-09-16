@@ -72,13 +72,7 @@ exports.settings = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
-/**
- * GET /api/drive/file/:id/download
- *
- * Relais en flux : le fichier n'est jamais chargé en mémoire, et les en-têtes
- * de type et de nom sont conservés. Le mobile envoie son jeton comme sur
- * n'importe quelle autre route — c'est ce qui manquait (P0-07).
- */
+// GET /api/drive/file/:id/download
 exports.download = async (req, res, next) => {
   try {
     const upstream = await http.get(`/emajlis/drive/file/${req.params.id}/download`, {
@@ -90,6 +84,14 @@ exports.download = async (req, res, next) => {
     for (const header of ['content-type', 'content-length', 'content-disposition']) {
       const value = upstream.headers[header];
       if (value) res.setHeader(header, value);
+    }
+
+    // Si le client demande ?inline=1, on force Content-Disposition: inline
+    // pour que la WebView affiche le fichier au lieu de le télécharger.
+    if (req.query.inline) {
+      const ct = upstream.headers['content-type'] || '';
+      const filename = (upstream.headers['content-disposition'] || '').match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/)?.[1]?.replace(/['"]/g, '') || `file`;
+      res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
     }
 
     upstream.data.on('error', (err) => {
@@ -124,4 +126,78 @@ exports.createFolder = async (req, res, next) => {
     }
     next(err);
   }
+};
+
+/**
+ * GET /api/cfiles/file/:id/download
+ *
+ * Proxy for cfiles module attachments.
+ * HumHub's cfiles download URL is the absolute api_download_url from the file
+ * object — typically https://host/index.php?r=file/file/download&id=:id
+ * We proxy it with the user's token so the app never needs to handle auth.
+ */
+/**
+ * GET /api/cfiles/file/:id/download
+ *
+ * Proxy for cfiles attachments. Tries multiple HumHub download endpoints
+ * in order — stops at first success.
+ */
+exports.downloadCfile = async (req, res, next) => {
+  const id = req.params.id;
+  const inlineParam = req.query.inline ? { inline: 1 } : undefined;
+
+  // Try every known HumHub file download pattern in order.
+  const attempts = [
+    () => http.get(`/emajlis/drive/file/${id}/download`, {
+      ...asUser(req.humhubToken),
+      params: inlineParam,
+      responseType: 'stream',
+    }),
+    () => http.get(`/file/download`, {
+      ...asUser(req.humhubToken),
+      params: { id, ...inlineParam },
+      responseType: 'stream',
+    }),
+    () => http.get(`/emajlis/cfiles/file/${id}/download`, {
+      ...asUser(req.humhubToken),
+      params: inlineParam,
+      responseType: 'stream',
+    }),
+  ];
+
+  let upstream = null;
+  let lastErr = null;
+  for (const attempt of attempts) {
+    try {
+      upstream = await attempt();
+      break;
+    } catch (e) {
+      console.warn(`[downloadCfile] fail -> ${e.response?.status} ${e.config?.url}`);
+      lastErr = e;
+      // Stop trying on auth errors — no point retrying with same token
+      if (e.response?.status === 401 || e.response?.status === 403) break;
+    }
+  }
+
+  if (!upstream) {
+    const status = lastErr?.response?.status;
+    if (status === 401) return res.status(401).json({ error: 'Session expirée.' });
+    if (status === 403) return res.status(403).json({ error: 'Accès refusé à ce fichier.' });
+    return res.status(404).json({ error: 'Fichier introuvable.' });
+  }
+
+  for (const h of ['content-type', 'content-length', 'content-disposition']) {
+    if (upstream.headers[h]) res.setHeader(h, upstream.headers[h]);
+  }
+  if (req.query.inline) {
+    const fname = (upstream.headers['content-disposition'] || '')
+      .match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/)?.[1]?.replace(/['"]/g, '') || 'file';
+    res.setHeader('Content-Disposition', `inline; filename="${fname}"`);
+  }
+
+  upstream.data.on('error', (err) => {
+    if (!res.headersSent) res.status(502).json({ error: 'Téléchargement interrompu.' });
+    else res.destroy(err);
+  });
+  upstream.data.pipe(res);
 };

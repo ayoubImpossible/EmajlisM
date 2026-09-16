@@ -89,8 +89,7 @@ async function loadBody(type, objectId, token, createdAt) {
       };
     }
 
-    case 'drive_file': {
-      const d = await tryGet(`/emajlis/drive/file/${objectId}`, token);
+    case 'drive_file': {      const d = await tryGet(`/emajlis/drive/file/${objectId}`, token);
       if (!d?.file) return null;
       const f = d.file;
       return {
@@ -105,6 +104,38 @@ async function loadBody(type, objectId, token, createdAt) {
           humanSize: f.human_size,
           downloadPath: `/api/drive/file/${objectId}/download`,
           versions: d.versions || [],
+        },
+      };
+    }
+
+    case 'cfile': {
+      const f = await tryGet(`/cfiles/file/${objectId}`, token);
+      if (!f) return null;
+      const file = f.file || f;
+      // Use the file's own id — HumHub /file/download?id= needs the file record
+      // id, not the content objectId (they are different numbers).
+      const fileId = file.id || file.guid || objectId;
+
+      const humanSize = (bytes) => {
+        const n = Number(bytes);
+        if (!Number.isFinite(n) || n <= 0) return '';
+        const units = ['o', 'Ko', 'Mo', 'Go'];
+        let i = 0; let v = n;
+        while (v >= 1024 && i < units.length - 1) { v /= 1024; i += 1; }
+        return `${v.toFixed(i === 0 ? 0 : 2)} ${units[i]}`;
+      };
+
+      return {
+        title: file.title || file.file_name || file.name || '',
+        body: file.description || '',
+        bodyFormat: 'text',
+        imageUrl: null,
+        extra: {
+          filename: file.file_name || file.name,
+          mimeType: file.mime_type,
+          size: file.size,
+          humanSize: file.human_size || humanSize(file.size),
+          downloadPath: `/api/cfiles/file/${fileId}/download`,
         },
       };
     }
