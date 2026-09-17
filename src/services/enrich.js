@@ -40,7 +40,7 @@ const { TtlCache, mapLimit } = require('./cache');
 const axios = require('axios');
 
 const previewCache = new TtlCache(5 * 60 * 1000, 3000);
-const CONCURRENCY = Number(process.env.ENRICH_CONCURRENCY) || 3;  // Reduced from 6 to 3
+const CONCURRENCY = Number(process.env.ENRICH_CONCURRENCY) || 6;
 
 // â”€â”€ WordPress source for ImportArticle / MajlissPost â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // These article types have no HumHub REST endpoint. Their images and titles
@@ -457,6 +457,7 @@ async function enrichItems(rawItems, token) {
     const key = `${item.objectModel}:${item.objectId}`;
     
     // Timeout-safe race: explicit cleanup to prevent timer leak
+    // Wait up to 15 seconds for each item preview
     let timeoutId;
     const preview = await Promise.race([
       previewCache.getOrSet(key, async () => {
@@ -471,7 +472,7 @@ async function enrichItems(rawItems, token) {
         return fetchPreview(item.type, item.objectId, token);
       }).finally(() => clearTimeout(timeoutId)),
       new Promise(resolve => {
-        timeoutId = setTimeout(() => resolve(null), 8000);  // Increased from 6s to 8s
+        timeoutId = setTimeout(() => resolve(null), 15000);  // 15 seconds per item
       }),
     ]);
     
@@ -492,12 +493,13 @@ async function enrichItems(rawItems, token) {
     }
   });
 
-  // Overall timeout for enrichment: if it takes more than 45s, return what we have
+  // Overall timeout for enrichment: 2 minutes to allow HumHub to respond
+  // With 20 items, 6 concurrency, 15s per item: ~50 seconds needed
   const timeoutPromise = new Promise((resolve) => {
     setTimeout(() => {
-      console.warn('[enrichItems] Operation exceeded 45s timeout, returning partial results');
+      console.warn('[enrichItems] Operation exceeded 2 minutes, returning partial results');
       resolve();
-    }, 45000);  // Increased from 30s to 45s
+    }, 120000);  // 2 minutes = 120 seconds
   });
 
   await Promise.race([enrichmentPromise, timeoutPromise]);

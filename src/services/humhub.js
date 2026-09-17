@@ -85,7 +85,7 @@ const httpsAgent = INSECURE
 
 const http = axios.create({
   baseURL: API,
-  timeout: Number(process.env.HUMHUB_TIMEOUT_MS) || 15000,
+  timeout: Number(process.env.HUMHUB_TIMEOUT_MS) || 30000,  // 30 seconds per request
   httpsAgent,
   headers: { Accept: 'application/json' },
   // Ensure sockets are destroyed on errors to prevent connection leaks
