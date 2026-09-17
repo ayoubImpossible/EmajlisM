@@ -37,15 +37,7 @@ export function useTypeColor(type) {
   return colors[typeMeta(type).tone] || colors.textMuted;
 }
 
-// ─── Like state hook ──────────────────────────────────────────────────────────
-/**
- * Manages liked state + count for a single feed item.
- *
- * - Loads currentUserLiked from GET /api/likes/status on mount (lazy, one call per card)
- * - Optimistic update: flips state + count instantly, then confirms with the server
- * - Reverts if the server call fails
- * - model + pk come from item.objectModel / item.objectId (already in every feed item)
- */
+
 function useLikeState(item) {
   const model = item?.objectModel || null;
   const pk    = item?.objectId    ?? null;
@@ -60,22 +52,37 @@ function useLikeState(item) {
     return () => { mounted.current = false; };
   }, []);
 
-  // Load like status once on mount (only if we have model+pk)
+  // Load like status with staggered delay to prevent API flooding
+  // When 20 cards mount simultaneously, this spreads requests over 2 seconds
   useEffect(() => {
     if (!model || pk == null) return;
+    
     let alive = true;
-    getLikeStatus(model, pk)
-      .then((data) => {
-        if (!alive || !mounted.current) return;
-        setLiked(!!data?.currentUserLiked);
-        // Server count is more accurate than feed snapshot — prefer it
-        if (data?.counter != null) setCount(data.counter);
-      })
-      .catch(() => {
-        // If status call fails, fall back to feed count, liked = false
-        if (alive && mounted.current) setLiked(false);
-      });
-    return () => { alive = false; };
+    let timeoutId;
+    
+    // Random delay 0-2000ms to stagger requests
+    const delay = Math.random() * 2000;
+    
+    timeoutId = setTimeout(() => {
+      if (!alive || !mounted.current) return;
+      
+      getLikeStatus(model, pk)
+        .then((data) => {
+          if (!alive || !mounted.current) return;
+          setLiked(!!data?.currentUserLiked);
+          // Server count is more accurate than feed snapshot — prefer it
+          if (data?.counter != null) setCount(data.counter);
+        })
+        .catch(() => {
+          // If status call fails, fall back to feed count, liked = false
+          if (alive && mounted.current) setLiked(false);
+        });
+    }, delay);
+    
+    return () => { 
+      alive = false;
+      if (timeoutId) clearTimeout(timeoutId);
+    };
   }, [model, pk]);
 
   const toggle = useCallback(async () => {
