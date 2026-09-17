@@ -3,11 +3,11 @@
 const { http, asUser } = require('../services/humhub');
 const { TtlCache } = require('../services/cache');
 
-// Cache likes status 60s per (model, pk, userId).
+// Cache likes status 5 minutes per (model, pk, userId).
 // Eliminates the flood of /api/likes/status requests when a feed loads:
 // 20 ContentCards mounting simultaneously = 20 identical HumHub calls
 // reduced to 1 fetch + 19 cache hits after the first card loads.
-const likesCache = new TtlCache(60 * 1000, 5000);
+const likesCache = new TtlCache(5 * 60 * 1000, 5000);  // 5 minutes TTL
 
 // ── Commentaires ──────────────────────────────────────────────────────────────
 
