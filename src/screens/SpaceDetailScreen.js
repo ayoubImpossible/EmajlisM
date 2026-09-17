@@ -80,41 +80,49 @@ export default function SpaceDetailScreen({ route, navigation }) {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
 
-  // Menu et effectif : trois appels en parallèle, une seule fois.
+  // Menu et effectif: annulé si l'écran se démonte.
   useEffect(() => {
-    let alive = true;
-    Promise.allSettled([getSpaceModules(cid), getSpacePages(cid), getSpaceMembers(space.id, 1, 1)])
-      .then(([mods, pgs, mem]) => {
-        if (!alive || !mounted.current) return;
-        if (mods.status === 'fulfilled') setMenu(mods.value?.menu || []);
-        if (pgs.status === 'fulfilled') setPages((pgs.value?.results || []).filter((p) => !p.hidden));
-        if (mem.status === 'fulfilled' && typeof mem.value?.total === 'number') setMemberCount(mem.value.total);
-        setMenuLoading(false);
-      });
-    return () => { alive = false; };
+    const controller = new AbortController();
+    const signal = controller.signal;
+
+    Promise.allSettled([
+      getSpaceModules(cid, signal),
+      getSpacePages(cid, signal),
+      getSpaceMembers(space.id, 1, 1, signal),
+    ]).then(([mods, pgs, mem]) => {
+      if (signal.aborted) return;
+      if (mods.status === 'fulfilled') setMenu(mods.value?.menu || []);
+      if (pgs.status === 'fulfilled') setPages((pgs.value?.results || []).filter((p) => !p.hidden));
+      if (mem.status === 'fulfilled' && typeof mem.value?.total === 'number') setMemberCount(mem.value.total);
+      setMenuLoading(false);
+    });
+    return () => controller.abort();
   }, [cid, space.id]);
 
-  const load = useCallback(async (p = 1, append = false) => {
-    if (!mounted.current) return;
+  const load = useCallback(async (p = 1, append = false, signal = null) => {
     try {
-      const res = await getSpaceFeed(cid, p, 20);
-      if (!mounted.current) return;  // screen unmounted while request was in flight
+      const res = await getSpaceFeed(cid, p, 20, signal);
+      if (signal?.aborted) return;
       const results = res.results || [];
       setHasMore(p < (res.pages || 1));
       setPage(p);
       setItems((prev) => (append ? [...prev, ...results] : results));
       setError(null);
     } catch (e) {
-      if (!mounted.current) return;
+      if (e?.name === 'AbortError' || e?.code === 'ERR_CANCELED') return;
       setError(messageFor(e, t('Impossible de charger le fil.', 'تعذر تحميل التدفق.')));
     } finally {
-      if (mounted.current) {
+      if (!signal?.aborted) {
         setLoading(false); setLoadingMore(false); setRefreshing(false);
       }
     }
   }, [cid, t]);
 
-  useEffect(() => { load(1); }, [load]);
+  useEffect(() => {
+    const controller = new AbortController();
+    load(1, false, controller.signal);
+    return () => controller.abort(); // Cancels the HTTP request immediately on unmount
+  }, [load]);
 
   // ── Navigation ────────────────────────────────────────────────────────────
   const openWeb = (path, title) => {
