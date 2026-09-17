@@ -131,6 +131,43 @@ exports.likeStatus = async (req, res, next) => {
   }
 };
 
+// POST /api/likes/batch   { items: [{model, pk}, ...] }
+// Batch endpoint to fetch multiple like statuses in one request
+exports.likeBatchStatus = async (req, res, next) => {
+  const { items } = req.body || {};
+  if (!Array.isArray(items) || items.length === 0) {
+    return res.status(400).json({ error: 'Parameter "items" must be a non-empty array of {model, pk}' });
+  }
+  if (items.length > 50) {
+    return res.status(400).json({ error: 'Maximum 50 items per batch request' });
+  }
+
+  const results = {};
+  const token = req.humhubToken;
+  
+  // Fetch with concurrency limit to avoid overwhelming HumHub
+  const { mapLimit } = require('../services/cache');
+  await mapLimit(items, 5, async (item) => {
+    const { model, pk } = item;
+    if (!model || !pk) return;
+    
+    const key = `${model}:${pk}`;
+    try {
+      const { data } = await http.get('/emajlis/like/status', {
+        ...asUser(token),
+        params: { model, pk },
+        timeout: 3000, // Faster timeout for batch
+      });
+      results[key] = data;
+    } catch (err) {
+      // Return zero counter on error so app doesn't break
+      results[key] = { counter: 0, currentUserLiked: false, error: true };
+    }
+  });
+
+  res.json({ results });
+};
+
 // POST /api/likes   { model, pk }
 exports.like = async (req, res, next) => {
   const { model, pk } = req.body || {};

@@ -40,7 +40,7 @@ const { TtlCache, mapLimit } = require('./cache');
 const axios = require('axios');
 
 const previewCache = new TtlCache(5 * 60 * 1000, 3000);
-const CONCURRENCY = Number(process.env.ENRICH_CONCURRENCY) || 6;
+const CONCURRENCY = Number(process.env.ENRICH_CONCURRENCY) || 3;  // Reduced from 6 to 3
 
 // â”€â”€ WordPress source for ImportArticle / MajlissPost â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // These article types have no HumHub REST endpoint. Their images and titles
@@ -471,7 +471,7 @@ async function enrichItems(rawItems, token) {
         return fetchPreview(item.type, item.objectId, token);
       }).finally(() => clearTimeout(timeoutId)),
       new Promise(resolve => {
-        timeoutId = setTimeout(() => resolve(null), 6000);
+        timeoutId = setTimeout(() => resolve(null), 8000);  // Increased from 6s to 8s
       }),
     ]);
     
@@ -492,12 +492,12 @@ async function enrichItems(rawItems, token) {
     }
   });
 
-  // Overall timeout for enrichment: if it takes more than 30s, return what we have
+  // Overall timeout for enrichment: if it takes more than 45s, return what we have
   const timeoutPromise = new Promise((resolve) => {
     setTimeout(() => {
-      console.warn('[enrichItems] Operation exceeded 30s timeout, returning partial results');
+      console.warn('[enrichItems] Operation exceeded 45s timeout, returning partial results');
       resolve();
-    }, 30000);
+    }, 45000);  // Increased from 30s to 45s
   });
 
   await Promise.race([enrichmentPromise, timeoutPromise]);

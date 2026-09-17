@@ -14,6 +14,7 @@ comments.delete('/:id', requireAuth, ctrl.deleteComment);
 // Likes — montés sur /api/likes
 const likes = express.Router();
 likes.get('/status', requireAuth, ctrl.likeStatus);
+likes.post('/batch', requireAuth, ctrl.likeBatchStatus);  // Batch endpoint
 likes.post('/', requireAuth, ctrl.like);
 likes.delete('/', requireAuth, ctrl.unlike);
 
