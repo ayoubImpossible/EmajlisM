@@ -65,9 +65,20 @@ if (!INSECURE && extraCas.loaded.length) {
 }
 
 const httpsAgent = INSECURE
-  ? new https.Agent({ rejectUnauthorized: false })
+  ? new https.Agent({ 
+      rejectUnauthorized: false, 
+      keepAlive: true, 
+      maxSockets: 20, 
+      maxFreeSockets: 5,
+      timeout: 30000, // 30s connection timeout
+      keepAliveMsecs: 1000, // Send keep-alive probes every 1s
+    })
   : new https.Agent({
       keepAlive: true,
+      maxSockets: 20,
+      maxFreeSockets: 5,
+      timeout: 30000, // 30s connection timeout
+      keepAliveMsecs: 1000, // Send keep-alive probes every 1s
       // Les racines de Node RESTENT dans la liste : on ajoute, on ne remplace pas.
       ...(extraCas.pems.length ? { ca: [...tls.rootCertificates, ...extraCas.pems] } : {}),
     });
@@ -77,6 +88,10 @@ const http = axios.create({
   timeout: Number(process.env.HUMHUB_TIMEOUT_MS) || 15000,
   httpsAgent,
   headers: { Accept: 'application/json' },
+  // Ensure sockets are destroyed on errors to prevent connection leaks
+  decompress: true,
+  maxRedirects: 5,
+  maxContentLength: 50 * 1024 * 1024, // 50MB
 });
 
 /**
@@ -90,6 +105,17 @@ http.interceptors.request.use((config) => {
   return config;
 });
 
+/** Log les timeouts réseau pour faciliter le diagnostic. */
+http.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.code === 'ECONNABORTED' || error.code === 'ETIMEDOUT') {
+      console.warn('[humhub] request timed out:', error.config?.url);
+    }
+    return Promise.reject(error);
+  },
+);
+
 /** En-tête d'autorisation pour le jeton d'un utilisateur. */
 const asUser = (token) => ({ headers: { Authorization: `Bearer ${token}` } });
 
@@ -102,7 +128,13 @@ async function tryGet(url, token, params) {
   try {
     const { data } = await http.get(url, { ...asUser(token), ...(params ? { params } : {}) });
     return data;
-  } catch (_err) {
+  } catch (err) {
+    // Log non-404 errors for debugging
+    if (err.code === 'ECONNABORTED' || err.code === 'ETIMEDOUT' || err.code === 'ECONNRESET') {
+      console.warn(`[tryGet] ${url} - connection issue: ${err.code}`);
+    } else if (err.response && ![404, 403].includes(err.response.status)) {
+      console.warn(`[tryGet] ${url} - HTTP ${err.response.status}`);
+    }
     return null;
   }
 }

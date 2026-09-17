@@ -27,13 +27,16 @@ const { TtlCache } = require('../services/cache');
 const userCache = new TtlCache(60 * 1000, 500);
 const managerCache = new TtlCache(5 * 60 * 1000, 500);
 
-/** Clé de cache : empreinte courte du jeton, jamais le jeton lui-même. */
+/**
+ * Clé de cache dérivée du jeton, jamais le jeton lui-même.
+ * Utilise la longueur + les 24 derniers caractères (signature JWT) :
+ * suffisamment unique pour un cache local tout en évitant les collisions
+ * du hash 32 bits précédent.
+ */
 function tokenKey(token) {
-  let hash = 0;
-  for (let i = 0; i < token.length; i++) {
-    hash = (hash * 31 + token.charCodeAt(i)) | 0;
-  }
-  return `t${hash}:${token.length}`;
+  // Use token length + last 24 chars — unique enough for a local cache
+  // Never log or expose the token value itself
+  return `${token.length}:${token.slice(-24)}`;
 }
 
 function mapUser(data) {

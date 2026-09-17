@@ -71,41 +71,24 @@ async function fetchWpPostsByDate(isoDate) {
   });
 }
 
-// Track used WordPress posts to prevent duplicates
-const usedWpPosts = new Map();
-
 /**
  * Given a raw HumHub article item, fetch its title and featured image from WordPress.
- * Matches by created_at date â€” on any given day there are typically 1â€“3 articles.
- * Uses a position counter to match each article with a unique WordPress post
- * and prevents duplicates when filters are applied.
+ * Matches by created_at date â€" on any given day there are typically 1â€"3 articles.
+ * Uses humhubId modulo posts.length for a stable, deterministic assignment so the
+ * same HumHub item always maps to the same WP post regardless of filter state.
+ * This replaces the previous index-counter approach which leaked memory (the
+ * usedWpPosts Map grew forever) and produced inconsistent results across requests.
  */
 async function fetchArticleFromWp(createdAt, humhubId) {
   if (!createdAt) return null;
   const posts = await fetchWpPostsByDate(createdAt);
   if (!posts.length) return null;
-  
-  const day = createdAt.slice(0, 10);
-  const key = `wp:index:${day}`;
-  
-  // Get or initialize the index counter for this date
-  if (!usedWpPosts.has(key)) {
-    usedWpPosts.set(key, 0);
-  }
-  
-  let index = usedWpPosts.get(key);
-  // If we've already used all posts for this date, reset and start from the first
-  if (index >= posts.length) {
-    index = 0;
-    usedWpPosts.set(key, 0);
-  }
-  
-  const p = posts[index];
-  usedWpPosts.set(key, index + 1);
-  
+  // Stable assignment: use humhubId modulo posts.length so same item always maps to same WP post
+  const index = humhubId ? (Number(humhubId) % posts.length) : 0;
+  const p = posts[index] || posts[0];
   const media = p._embedded?.['wp:featuredmedia']?.[0];
   return {
-    title: (p.title?.rendered || '').replace(/&#8211;/g, 'â€“').replace(/&amp;/g, '&').replace(/<[^>]+>/g, '').trim() || 'Article du Journal',
+    title: (p.title?.rendered || '').replace(/&#8211;/g, 'â€"').replace(/&amp;/g, '&').replace(/<[^>]+>/g, '').trim() || 'Article du Journal',
     excerpt: (p.excerpt?.rendered || '').replace(/<[^>]+>/g, '').trim().slice(0, 220),
     imageUrl: media?.source_url || null,
     externalUrl: p.link || null,
@@ -432,7 +415,8 @@ async function enrichItems(rawItems, token) {
   const sources = (rawItems || []).filter(Boolean);
   const items = sources.map(baseItem);
 
-  await mapLimit(items, CONCURRENCY, async (item, index) => {
+  // Timeout protection for the entire enrichment operation
+  const enrichmentPromise = mapLimit(items, CONCURRENCY, async (item, index) => {
     const raw = sources[index];
 
     // Le serveur fournit dÃ©jÃ  le preview (BG-01 dÃ©ployÃ©) : rien Ã  faire.
@@ -471,17 +455,28 @@ async function enrichItems(rawItems, token) {
     }
 
     const key = `${item.objectModel}:${item.objectId}`;
-    const preview = await previewCache.getOrSet(key, async () => {
-      // Articles: fetch from WordPress, all other types: fetch from HumHub
-      if (item.type === 'article') {
-        const createdAt = (raw.metadata?.created_at || '').slice(0, 10);
-        console.log('[enrich] article type, createdAt:', createdAt);
-        const wpData = await fetchArticleFromWp(createdAt, item.id);
-        console.log('[enrich] WordPress returned:', wpData ? `title=${wpData.title}, image=${wpData.imageUrl}` : 'null');
-        return wpData;
-      }
-      return fetchPreview(item.type, item.objectId, token);
-    });
+    
+    // Timeout-safe race: explicit cleanup to prevent timer leak
+    let timeoutId;
+    const preview = await Promise.race([
+      previewCache.getOrSet(key, async () => {
+        // Articles: fetch from WordPress, all other types: fetch from HumHub
+        if (item.type === 'article') {
+          const createdAt = (raw.metadata?.created_at || '').slice(0, 10);
+          console.log('[enrich] article type, createdAt:', createdAt);
+          const wpData = await fetchArticleFromWp(createdAt, item.id);
+          console.log('[enrich] WordPress returned:', wpData ? `title=${wpData.title}, image=${wpData.imageUrl}` : 'null');
+          return wpData;
+        }
+        return fetchPreview(item.type, item.objectId, token);
+      }).finally(() => clearTimeout(timeoutId)),
+      new Promise(resolve => {
+        timeoutId = setTimeout(() => resolve(null), 6000);
+      }),
+    ]);
+    
+    // Ensure timeout is cleared even if cache promise won the race
+    clearTimeout(timeoutId);
 
     if (preview) {
       item.title = preview.title || '';
@@ -496,6 +491,16 @@ async function enrichItems(rawItems, token) {
       item.needsServerSupport = true;
     }
   });
+
+  // Overall timeout for enrichment: if it takes more than 30s, return what we have
+  const timeoutPromise = new Promise((resolve) => {
+    setTimeout(() => {
+      console.warn('[enrichItems] Operation exceeded 30s timeout, returning partial results');
+      resolve();
+    }, 30000);
+  });
+
+  await Promise.race([enrichmentPromise, timeoutPromise]);
 
   return items;
 }
