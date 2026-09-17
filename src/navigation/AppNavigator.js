@@ -155,6 +155,10 @@ function MainTabs() {
         tabBarActiveTintColor: Colors.primary,
         tabBarInactiveTintColor: Colors.textMuted,
         tabBarItemStyle: tabStyles.tabItem,
+        // CRITICAL FIX: unmount inactive tab stacks so they stop firing
+        // background requests. Without this, HomeStack keeps loading feed
+        // filters while the user is on Espaces, saturating the socket pool.
+        unmountOnBlur: true,
       }}
     >
       <Tab.Screen

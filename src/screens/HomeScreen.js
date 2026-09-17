@@ -18,7 +18,7 @@
  *     colonnes sur tablette au lieu d'une colonne étirée.
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { View, Text, FlatList, RefreshControl, ActivityIndicator } from 'react-native';
 import { useFocusEffect, useIsFocused } from '@react-navigation/native';
 
@@ -49,7 +49,15 @@ export default function HomeScreen({ navigation }) {
   const [unseen, setUnseen] = useState(0);
   const [error, setError] = useState(null);
 
-  // Les filtres viennent du serveur.
+  // Track the current filter in a ref so load() always sees the latest value
+  // without being listed as a dependency (avoids infinite effect loops).
+  const filterRef = useRef(filter);
+  filterRef.current = filter;
+
+  // Abort token: increments every time we want to cancel in-flight requests.
+  // Any load() call that started with an older token discards its result.
+  const abortGen = useRef(0);
+
   useEffect(() => {
     let alive = true;
     searchTypes()
@@ -58,33 +66,51 @@ export default function HomeScreen({ navigation }) {
     return () => { alive = false; };
   }, []);
 
-  const load = useCallback(async (p = 1, append = false) => {
-    // Do not fire requests when the screen is not visible — this was causing
-    // the HomeScreen filter chips to keep firing simultaneous feed requests
-    // while the user was on a different screen (SpaceDetail, etc.).
-    if (!isFocused) return;
+  // load is stable — does NOT depend on isFocused or filter directly.
+  // It reads filterRef.current so it always uses the latest filter value,
+  // and checks isFocused at call time via the closure over the hook value.
+  const load = useCallback(async (p = 1, append = false, token = null) => {
+    const myToken = token ?? ++abortGen.current;
     try {
-      const params = filter ? { contentType: filter } : {};
+      const currentFilter = filterRef.current;
+      const params = currentFilter ? { contentType: currentFilter } : {};
       const res = await getFeed(p, 20, params);
-      // Ignore result if we navigated away while waiting
-      if (!isFocused) return;
+      // Discard if a newer load() has been started, or screen is no longer visible
+      if (abortGen.current !== myToken) return;
       const results = res.results || [];
       setHasMore(p < (res.pages || 1));
       setPage(p);
       setItems((prev) => (append ? [...prev, ...results] : results));
       setError(null);
     } catch (e) {
-      if (!isFocused) return;
+      if (abortGen.current !== myToken) return;
       setError(messageFor(e, t('Impossible de charger le fil.', 'تعذر تحميل التدفق.')));
     } finally {
       setLoading(false); setLoadingMore(false); setRefreshing(false);
     }
-  }, [filter, t, isFocused]);
+  }, [t]);
 
-  useEffect(() => { setLoading(true); setItems([]); load(1); }, [filter, load]);
+  // Reload when filter changes — but only if the screen is focused.
+  // Increment abortGen so any previous in-flight load is discarded.
+  useEffect(() => {
+    if (!isFocused) return;
+    const token = ++abortGen.current;
+    setLoading(true);
+    setItems([]);
+    load(1, false, token);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filter]);
 
+  // When screen comes back into focus, reload if we have no items
+  // (e.g. first mount, or returned from another screen after an error).
   useFocusEffect(useCallback(() => {
     getUnseenCount().then((d) => setUnseen(d?.count ?? d?.unseen ?? 0)).catch(() => {});
+    if (items.length === 0 && !loading) {
+      const token = ++abortGen.current;
+      setLoading(true);
+      load(1, false, token);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []));
 
   const firstName = user?.firstname || user?.display_name?.split(' ')[0] || t('Membre', 'عضو');
