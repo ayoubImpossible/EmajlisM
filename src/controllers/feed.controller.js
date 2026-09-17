@@ -31,7 +31,10 @@ exports.getFeed = async (req, res, next) => {
 
   // Build params — only include contentType if provided
   const params = { page, limit };
-  if (contentType) params.contentType = contentType;
+  if (contentType) {
+    params.contentType = contentType;
+    console.log('[getFeed] FILTER BY contentType:', contentType);
+  }
 
   console.log('[getFeed] params:', params);
 
@@ -40,9 +43,15 @@ exports.getFeed = async (req, res, next) => {
       ...asUser(token),
       params,
     });
+    
+    console.log('[getFeed] HumHub returned:', data.total, 'items');
+    
     const results = await enrichItems(data.results, token);
     res.json(paginated(data, results, page));
-  } catch (err) { next(err); }
+  } catch (err) { 
+    console.error('[getFeed] ERROR:', err.response?.status, err.message);
+    next(err);
+  }
 };
 
 // ── Recherche ────────────────────────────────────────────────────────────────
@@ -260,7 +269,7 @@ exports.markSeen = async (req, res, next) => {
     } catch (err) {
       if (err.response?.status !== 404 && err.response?.status !== 405) {
         console.error('[markSeen] Error:', err.response?.status, err.message);
-      }
+      } 
     }
   }
   // Not critical — just return success so the app doesn't break
