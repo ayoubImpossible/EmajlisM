@@ -23,7 +23,9 @@ function paginated(data, results, page) {
 /** Affiche le flux principal (HumHub) ou d'un espace (si ?container=N). */
 exports.getFeed = async (req, res, next) => {
   const { container, contentType } = req.query;
-  const page = toPage(req.query.page);
+  const page  = toPage(req.query.page);
+  // Default 10 items (was 20) — halves enrichment sockets per request.
+  // App already requests 20 via param; this only changes the implicit default.
   const limit = clampLimit(req.query.limit, 10);
   const token = req.humhubToken;
 

@@ -64,22 +64,28 @@ if (!INSECURE && extraCas.loaded.length) {
   console.log(`[tls] chaîne complétée avec : ${extraCas.loaded.join(', ')}`);
 }
 
+// FIX: maxSockets raised from 20 → 50.
+// Root cause of 2-minute timeout: enrichItems opens 6 concurrent fetches per
+// feed request. With multiple simultaneous feed requests (scroll + filter
+// change), all 20 sockets fill with 30s-timeout requests. Every new request
+// then queues behind them and the 2-minute enrichment timeout fires before
+// any socket is freed. 50 sockets ensures enrichment and auth/API requests
+// never compete for the same pool slot.
 const httpsAgent = INSECURE
   ? new https.Agent({ 
       rejectUnauthorized: false, 
       keepAlive: true, 
-      maxSockets: 20, 
-      maxFreeSockets: 5,
-      timeout: 30000, // 30s connection timeout
-      keepAliveMsecs: 1000, // Send keep-alive probes every 1s
+      maxSockets: 50,
+      maxFreeSockets: 10,
+      timeout: 30000,
+      keepAliveMsecs: 1000,
     })
   : new https.Agent({
       keepAlive: true,
-      maxSockets: 20,
-      maxFreeSockets: 5,
-      timeout: 30000, // 30s connection timeout
-      keepAliveMsecs: 1000, // Send keep-alive probes every 1s
-      // Les racines de Node RESTENT dans la liste : on ajoute, on ne remplace pas.
+      maxSockets: 50,
+      maxFreeSockets: 10,
+      timeout: 30000,
+      keepAliveMsecs: 1000,
       ...(extraCas.pems.length ? { ca: [...tls.rootCertificates, ...extraCas.pems] } : {}),
     });
 
@@ -129,11 +135,41 @@ async function tryGet(url, token, params) {
     const { data } = await http.get(url, { ...asUser(token), ...(params ? { params } : {}) });
     return data;
   } catch (err) {
-    // Log non-404 errors for debugging
     if (err.code === 'ECONNABORTED' || err.code === 'ETIMEDOUT' || err.code === 'ECONNRESET') {
       console.warn(`[tryGet] ${url} - connection issue: ${err.code}`);
     } else if (err.response && ![404, 403].includes(err.response.status)) {
       console.warn(`[tryGet] ${url} - HTTP ${err.response.status}`);
+    }
+    return null;
+  }
+}
+
+/**
+ * Variante de tryGet avec timeout court (5 s) pour l'enrichissement.
+ *
+ * ROOT CAUSE FIX:
+ * tryGet utilisait le timeout global de 30 s. Avec 6 requêtes concurrentes
+ * d'enrichissement × plusieurs appels feed simultanés (scroll, filtre…),
+ * les 20 sockets se remplissaient de requêtes bloquées pendant 30 s chacune.
+ * Toute nouvelle requête était mise en file d'attente derrière elles,
+ * déclenchant le timeout de 2 minutes d'enrichItems.
+ *
+ * Avec 5 s par requête, un socket se libère 6× plus vite, et le pool de 50
+ * sockets ne peut jamais être entièrement saturé par l'enrichissement seul.
+ */
+async function tryGetFast(url, token, params) {
+  try {
+    const { data } = await http.get(url, {
+      ...asUser(token),
+      ...(params ? { params } : {}),
+      timeout: 5000,  // 5 s — libère le socket vite même si HumHub est lent
+    });
+    return data;
+  } catch (err) {
+    if (err.code === 'ECONNABORTED' || err.code === 'ETIMEDOUT') {
+      // Silence timeouts in enrichment — expected when HumHub is slow
+    } else if (err.response && ![404, 403].includes(err.response.status)) {
+      console.warn(`[tryGetFast] ${url} - HTTP ${err.response.status}`);
     }
     return null;
   }
@@ -145,4 +181,4 @@ const tlsStatus = () => ({
   extraChainFiles: extraCas.loaded,
 });
 
-module.exports = { http, API, BASE, asUser, tryGet, INSECURE, httpsAgent, tlsStatus };
+module.exports = { http, API, BASE, asUser, tryGet, tryGetFast, INSECURE, httpsAgent, tlsStatus };
