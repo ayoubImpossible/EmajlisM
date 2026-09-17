@@ -27,7 +27,7 @@ const { tryGetFast } = require('./humhub');
 const { TtlCache, mapLimit } = require('./cache');
 const axios = require('axios');
 
-const previewCache = new TtlCache(5 * 60 * 1000, 3000);
+const previewCache = new TtlCache(15 * 60 * 1000, 3000); // 15 min — reduces HumHub calls on repeat visits
 const CONCURRENCY = Number(process.env.ENRICH_CONCURRENCY) || 6;
 
 // Deduplication: evite d'ouvrir 2 sockets pour le meme objectId en parallele.
@@ -36,7 +36,7 @@ const inflightEnrich = new Map();
 // ── WordPress source for ImportArticle / MajlissPost ─────────────────────────
 const WP_BASE = (process.env.WP_BASE_URL || 'https://intranet.csefrs.ma').replace(/\/+$/, '');
 const WP_API  = `${WP_BASE}/wp-json/wp/v2`;
-const wpCache = new TtlCache(10 * 60 * 1000, 1000);
+const wpCache = new TtlCache(30 * 60 * 1000, 1000); // 30 min — WP articles rarely change
 
 async function fetchWpPostsByDate(isoDate) {
   if (!isoDate) return [];
