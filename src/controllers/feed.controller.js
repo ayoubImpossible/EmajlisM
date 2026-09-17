@@ -46,10 +46,20 @@ exports.getFeed = async (req, res, next) => {
       params,
     });
     
-    console.log('[getFeed] HumHub returned:', data.total, 'items');
+    const totalFromHumHub = data.total ?? (data.results || []).length;
+    console.log('[getFeed] HumHub returned:', totalFromHumHub, 'items (displaying', limit, ')');
     
-    const results = await enrichItems(data.results, token);
-    res.json(paginated(data, results, page));
+    // CRITICAL: HumHub ignores the `limit` param for some content types
+    // (MajlissPost, ImportArticle) and returns ALL items (365, 401...).
+    // We must slice BEFORE enriching, otherwise we enrich hundreds of items.
+    const rawResults = (data.results || []).slice(0, limit);
+    
+    const results = await enrichItems(rawResults, token);
+    
+    // Rebuild pagination with correct numbers
+    const total = totalFromHumHub;
+    const pages = Math.ceil(total / limit) || 1;
+    res.json({ total, pages, page, results });
   } catch (err) { 
     console.error('[getFeed] ERROR:', err.response?.status, err.message);
     next(err);
@@ -114,7 +124,8 @@ exports.getSpaceFeed = async (req, res, next) => {
       ...asUser(token),
       params: { page, limit },
     });
-    const results = await enrichItems(data.results, token);
+    const rawResults = (data.results || []).slice(0, limit);
+    const results = await enrichItems(rawResults, token);
     return res.json(paginated(data, results, page));
   } catch (err) {
     if (err.response?.status !== 404) return next(err);
@@ -125,7 +136,8 @@ exports.getSpaceFeed = async (req, res, next) => {
       ...asUser(token),
       params: { page, limit },
     });
-    const results = await enrichItems(data.results, token);
+    const rawResults = (data.results || []).slice(0, limit);
+    const results = await enrichItems(rawResults, token);
     res.json({ ...paginated(data, results, page), degraded: true });
   } catch (err) { next(err); }
 };

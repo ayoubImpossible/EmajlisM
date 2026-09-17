@@ -1,23 +1,13 @@
 'use strict';
 
-/**
- * Commentaires et likes — comble BG-06 et BG-07.
- *
- * Ces deux familles d'endpoints existent côté HumHub mais n'étaient pas
- * exposées : le bloc social des écrans de détail ne pouvait donc rien afficher
- * ni envoyer.
- *
- * Note sur les likes : l'API REST standard de HumHub sait lire et supprimer un
- * like mais ne sait PAS en créer. C'est le module custom `emajlis-api` qui
- * fournit la création, sur /emajlis/like. Un repli est prévu si ce module est
- * désactivé.
- *
- * Note d'encodage : le paramètre `model` contient des antislashs
- * (humhub\modules\post\models\Post). axios les encode correctement en query ;
- * en revanche il ne faut PAS les ré-échapper à la main.
- */
-
 const { http, asUser } = require('../services/humhub');
+const { TtlCache } = require('../services/cache');
+
+// Cache likes status 60s per (model, pk, userId).
+// Eliminates the flood of /api/likes/status requests when a feed loads:
+// 20 ContentCards mounting simultaneously = 20 identical HumHub calls
+// reduced to 1 fetch + 19 cache hits after the first card loads.
+const likesCache = new TtlCache(60 * 1000, 5000);
 
 // ── Commentaires ──────────────────────────────────────────────────────────────
 
@@ -108,27 +98,40 @@ exports.likeStatus = async (req, res, next) => {
   const { model, pk } = req.query;
   if (!model || !pk) return res.status(400).json({ error: 'Les paramètres "model" et "pk" sont requis.' });
 
+  // Cache key includes userId so user A never sees user B's liked state
+  const userId  = req.user?.id || 'anon';
+  const cacheKey = `like:${model}:${pk}:${userId}`;
+  const hit = likesCache.get(cacheKey);
+  if (hit !== undefined) return res.json(hit);
+
+  let result;
   try {
     const { data } = await http.get('/emajlis/like/status', {
       ...asUser(req.humhubToken),
       params: { model, pk },
     });
-    return res.json(data);
+    result = data;
   } catch (err) {
     if (err.response?.status !== 404) return next(err);
+
+    // Fallback: standard HumHub likes list
+    try {
+      const { data } = await http.get('/like/find-by-object', {
+        ...asUser(req.humhubToken),
+        params: { model, pk },
+      });
+      result = { counter: data.total ?? 0, currentUserLiked: null, degraded: true };
+    } catch (err2) {
+      if (err2.response?.status === 404) {
+        result = { counter: 0, currentUserLiked: false };
+      } else {
+        return next(err2);
+      }
+    }
   }
 
-  // Repli : l'API standard sait lister les likes d'un objet.
-  try {
-    const { data } = await http.get('/like/find-by-object', {
-      ...asUser(req.humhubToken),
-      params: { model, pk },
-    });
-    res.json({ counter: data.total ?? 0, currentUserLiked: null, degraded: true });
-  } catch (err) {
-    if (err.response?.status === 404) return res.json({ counter: 0, currentUserLiked: false });
-    next(err);
-  }
+  likesCache.set(cacheKey, result);
+  res.json(result);
 };
 
 // POST /api/likes/batch   { items: [{model, pk}, ...] }
@@ -175,14 +178,13 @@ exports.like = async (req, res, next) => {
 
   try {
     const { data } = await http.post('/emajlis/like', { model, pk }, asUser(req.humhubToken));
+    // Invalidate cached like status so next request reflects the new state
+    const userId = req.user?.id || 'anon';
+    likesCache.map.delete(`like:${model}:${pk}:${userId}`);
     res.status(data.code === 201 ? 201 : 200).json(data);
   } catch (err) {
     const status = err.response?.status;
-    if (status === 404) {
-      return res.status(501).json({
-        error: "L'ajout de like nécessite le module emajlis-api, actuellement indisponible.",
-      });
-    }
+    if (status === 404) return res.status(501).json({ error: "L'ajout de like nécessite le module emajlis-api, actuellement indisponible." });
     if (status === 403) return res.status(403).json({ error: 'Vous ne pouvez pas aimer ce contenu.' });
     if (status === 400) return res.status(400).json({ error: 'Objet invalide.' });
     next(err);
@@ -196,13 +198,15 @@ exports.unlike = async (req, res, next) => {
 
   try {
     const { data } = await http.delete('/emajlis/like', { ...asUser(req.humhubToken), data: { model, pk } });
+    // Invalidate cached like status
+    const userId = req.user?.id || 'anon';
+    likesCache.map.delete(`like:${model}:${pk}:${userId}`);
     res.json(data);
   } catch (err) {
-    if (err.response?.status === 404) {
-      return res.status(501).json({
-        error: 'Le retrait de like nécessite le module emajlis-api, actuellement indisponible.',
-      });
-    }
+    if (err.response?.status === 404) return res.status(501).json({ error: 'Le retrait de like nécessite le module emajlis-api, actuellement indisponible.' });
     next(err);
   }
 };
+
+// Export cache for periodic cleanup in server.js
+module.exports.likesCache = likesCache;

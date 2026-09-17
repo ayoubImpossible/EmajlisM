@@ -59,10 +59,13 @@ const { previewCache } = require('./services/enrich');
 const { userCache, managerCache } = require('./middleware/humhubAuth');
 
 setInterval(() => {
-  for (const cache of [previewCache, userCache, managerCache]) {
+  const { previewCache } = require('./services/enrich');
+  const { userCache, managerCache } = require('./middleware/humhubAuth');
+  const { likesCache } = require('./controllers/social.controller');
+  for (const cache of [previewCache, userCache, managerCache, likesCache]) {
     cache.cleanup();
   }
-}, 10 * 60 * 1000).unref(); // .unref() so this doesn't prevent process exit
+}, 10 * 60 * 1000).unref();
 
 // CORS : sans objet pour React Native, qui n'applique pas la politique
 // d'origine. Restreint tout de même si CORS_ORIGINS est défini, pour le jour où
