@@ -7,6 +7,22 @@ const axios = require('axios');
 const WP_BASE = (process.env.WP_BASE_URL || 'https://intranet.csefrs.ma').replace(/\/+$/, '');
 const WP_API  = `${WP_BASE}/wp-json/wp/v2`;
 
+/** Clean WordPress HTML to prevent srcset leakage in RenderHtml */
+function cleanWpHtml(html) {
+  if (!html) return '';
+  return html
+    // Remove srcset - it causes text to leak outside <img> tags
+    .replace(/\s+srcset\s*=\s*[\"'][^\"']*[\"']/gi, '')
+    // Remove sizes attribute
+    .replace(/\s+sizes\s*=\s*[\"'][^\"']*[\"']/gi, '')
+    // Remove loading attribute
+    .replace(/\s+loading\s*=\s*[\"'][^\"']*[\"']/gi, '')
+    // Remove width/height to make images responsive
+    .replace(/(<img[^>]*)\s+width\s*=\s*[\"']\d+[\"']/gi, '$1')
+    .replace(/(<img[^>]*)\s+height\s*=\s*[\"']\d+[\"']/gi, '$1');
+}
+
+
 /** Fetch the best matching WordPress post for an article by date. */
 async function fetchWpArticle(createdAt) {
   if (!createdAt) return null;
@@ -40,7 +56,7 @@ async function fetchWpArticle(createdAt) {
 
     return {
       title:      (p.title?.rendered || '').replace(/&#8211;/g, '–').replace(/&amp;/g, '&').replace(/<[^>]+>/g, '').trim(),
-      body,
+      body: cleanWpHtml(body),
       bodyFormat: 'html',
       imageUrl,
       extra:      { wpId: p.id, wpUrl: p.link },
