@@ -20,7 +20,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, FlatList, RefreshControl, ActivityIndicator } from 'react-native';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useIsFocused } from '@react-navigation/native';
 
 import { useTheme } from '../config/theme';
 import { useLang } from '../context/LangContext';
@@ -36,6 +36,7 @@ export default function HomeScreen({ navigation }) {
   const { colors, spacing, layout, type: T } = useTheme();
   const { t, lang, isRTL } = useLang();
   const { user } = useAuth();
+  const isFocused = useIsFocused();
 
   const [items, setItems] = useState([]);
   const [page, setPage] = useState(1);
@@ -48,8 +49,7 @@ export default function HomeScreen({ navigation }) {
   const [unseen, setUnseen] = useState(0);
   const [error, setError] = useState(null);
 
-  // Les filtres viennent du serveur. S'ils échouent, « Tout » reste utilisable :
-  // on ne remplace pas par une liste inventée.
+  // Les filtres viennent du serveur.
   useEffect(() => {
     let alive = true;
     searchTypes()
@@ -59,20 +59,27 @@ export default function HomeScreen({ navigation }) {
   }, []);
 
   const load = useCallback(async (p = 1, append = false) => {
+    // Do not fire requests when the screen is not visible — this was causing
+    // the HomeScreen filter chips to keep firing simultaneous feed requests
+    // while the user was on a different screen (SpaceDetail, etc.).
+    if (!isFocused) return;
     try {
       const params = filter ? { contentType: filter } : {};
       const res = await getFeed(p, 20, params);
+      // Ignore result if we navigated away while waiting
+      if (!isFocused) return;
       const results = res.results || [];
       setHasMore(p < (res.pages || 1));
       setPage(p);
       setItems((prev) => (append ? [...prev, ...results] : results));
       setError(null);
     } catch (e) {
+      if (!isFocused) return;
       setError(messageFor(e, t('Impossible de charger le fil.', 'تعذر تحميل التدفق.')));
     } finally {
       setLoading(false); setLoadingMore(false); setRefreshing(false);
     }
-  }, [filter, t]);
+  }, [filter, t, isFocused]);
 
   useEffect(() => { setLoading(true); setItems([]); load(1); }, [filter, load]);
 
