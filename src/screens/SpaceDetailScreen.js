@@ -12,7 +12,7 @@
  * n'apparaît pas. Ce n'est pas un oubli, c'est une limite mesurée.
  */
 
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { View, Text, FlatList, RefreshControl, ActivityIndicator, StyleSheet } from 'react-native';
 
 import { useTheme } from '../config/theme';
@@ -56,6 +56,16 @@ export default function SpaceDetailScreen({ route, navigation }) {
 
   const cid = space.contentcontainer_id || space.id;
 
+  // mounted ref — all async callbacks check this before touching state.
+  // When the screen unmounts (user navigated back), all in-flight requests
+  // silently discard their results instead of calling setState on an
+  // unmounted component and triggering background API calls.
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; };
+  }, []);
+
   const [menu, setMenu] = useState([]);
   const [pages, setPages] = useState([]);
   const [memberCount, setMemberCount] = useState(null);
@@ -75,7 +85,7 @@ export default function SpaceDetailScreen({ route, navigation }) {
     let alive = true;
     Promise.allSettled([getSpaceModules(cid), getSpacePages(cid), getSpaceMembers(space.id, 1, 1)])
       .then(([mods, pgs, mem]) => {
-        if (!alive) return;
+        if (!alive || !mounted.current) return;
         if (mods.status === 'fulfilled') setMenu(mods.value?.menu || []);
         if (pgs.status === 'fulfilled') setPages((pgs.value?.results || []).filter((p) => !p.hidden));
         if (mem.status === 'fulfilled' && typeof mem.value?.total === 'number') setMemberCount(mem.value.total);
@@ -85,17 +95,22 @@ export default function SpaceDetailScreen({ route, navigation }) {
   }, [cid, space.id]);
 
   const load = useCallback(async (p = 1, append = false) => {
+    if (!mounted.current) return;
     try {
       const res = await getSpaceFeed(cid, p, 20);
+      if (!mounted.current) return;  // screen unmounted while request was in flight
       const results = res.results || [];
       setHasMore(p < (res.pages || 1));
       setPage(p);
       setItems((prev) => (append ? [...prev, ...results] : results));
       setError(null);
     } catch (e) {
+      if (!mounted.current) return;
       setError(messageFor(e, t('Impossible de charger le fil.', 'تعذر تحميل التدفق.')));
     } finally {
-      setLoading(false); setLoadingMore(false); setRefreshing(false);
+      if (mounted.current) {
+        setLoading(false); setLoadingMore(false); setRefreshing(false);
+      }
     }
   }, [cid, t]);
 
