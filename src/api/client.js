@@ -36,7 +36,7 @@ export async function authHeaders() {
 
 const api = axios.create({
   baseURL: API_URL,
-  timeout: 15000,
+  timeout: 45000,  // Increased to 45s - HumHub can take 30s+
   headers: { Accept: 'application/json' },
 });
 
