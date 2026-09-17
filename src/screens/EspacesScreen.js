@@ -152,7 +152,7 @@ export default function EspacesScreen({ navigation }) {
           },
         ]}
         activeOpacity={0.88}
-        onPress={() => navigation.replace('SpaceDetail', { space: item })}
+        onPress={() => navigation.navigate('SpaceDetail', { space: item })}
         accessibilityRole="button"
         accessibilityLabel={item.name}
       >

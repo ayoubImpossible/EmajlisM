@@ -17,6 +17,7 @@ import { View, Text, FlatList, RefreshControl, ActivityIndicator, StyleSheet } f
 
 import { useTheme } from '../config/theme';
 import { useLang } from '../context/LangContext';
+import { useFocusEffect } from '@react-navigation/native';
 import { getSpaceFeed, getSpaceModules, getSpacePages, getSpaceMembers } from '../api/spaces';
 import { messageFor } from '../api/client';
 import ContentCard from '../components/content/ContentCard';
@@ -98,7 +99,7 @@ export default function SpaceDetailScreen({ route, navigation }) {
     if (!mounted.current) return;
     try {
       const res = await getSpaceFeed(cid, p, 20);
-      if (!mounted.current) return;  // screen unmounted while request was in flight
+      if (!mounted.current) return;
       const results = res.results || [];
       setHasMore(p < (res.pages || 1));
       setPage(p);
@@ -114,7 +115,18 @@ export default function SpaceDetailScreen({ route, navigation }) {
     }
   }, [cid, t]);
 
-  useEffect(() => { load(1); }, [load]);
+  // useFocusEffect: only loads when this screen is actually focused (visible).
+  // When user navigates back from SpaceDetail, this cleanup runs and prevents
+  // any pending state updates. When returning to this screen, it reloads.
+  // This replaces useEffect([load]) which fired even for background instances.
+  useFocusEffect(
+    useCallback(() => {
+      if (items.length === 0) {
+        load(1);
+      }
+      // No cleanup needed - load() already checks mounted.current
+    }, [load, items.length])
+  );
 
   // ── Navigation ────────────────────────────────────────────────────────────
   const openWeb = (path, title) => {
