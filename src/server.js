@@ -105,6 +105,9 @@ app.use('/uploads', express.static(UPLOAD_DIR));
 // Root endpoint
 app.get('/', (_req, res) => res.json({ app: 'eMajlis API', version: '1.0.0', status: 'running' }));
 
+// Simple test endpoint
+app.get('/ping', (_req, res) => res.json({ message: 'Hello World 👋', status: 'ok', time: new Date().toISOString() }));
+
 app.get('/health', (_req, res) => {
   const { feedCache, contentCache, staticCache } = require('./services/advancedCache');
   const { userCache, managerCache } = require('./middleware/humhubAuth');
