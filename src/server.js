@@ -221,30 +221,12 @@ app.use((req, res) =>
 
 app.use(errorHandler);
 
-// â”€â”€ DÃ©marrage â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Start server locally; export app for Vercel/serverless
 if (require.main === module) {
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`\n  eMajlis API  â†’  http://localhost:${PORT}`);
-    console.log(`  HumHub       â†’  ${HUMHUB_BASE}`);
-    console.log(`  TLS          â†’  ${INSECURE ? 'âš ï¸  vÃ©rification DÃ‰SACTIVÃ‰E' : 'vÃ©rification active'}`);
-    console.log(`  Environnement â†’  ${process.env.NODE_ENV || 'development'}\n`);
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log('eMajlis API running on port ' + PORT);
+    console.log('HumHub: ' + HUMHUB_BASE);
   });
 }
 
 module.exports = app;
-
-
-const { registerServer, setupShutdownHandlers } = require('./shutdown');
-
-// Start server if running as main module
-if (require.main === module) {
-  const server = app.listen(PORT, "0.0.0.0", () => {
-    console.log(`\n  eMajlis API  ->  http://localhost:${PORT}`);
-    console.log(`  HumHub       ->  ${HUMHUB_BASE}`);
-    console.log(`  TLS          ->  ${INSECURE ? 'DISABLED' : 'active'}`);
-    console.log(`  Environment  ->  ${process.env.NODE_ENV || 'development'}\n`);
-  });
-  
-  registerServer(server, httpsAgent);
-  setupShutdownHandlers();
-}
