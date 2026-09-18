@@ -159,12 +159,12 @@ export default function EspacesScreen({ navigation }) {
         {/* â”€â”€ Top banner with gradient overlay â”€â”€ */}
         <View style={[styles.banner, { borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl, backgroundColor: `${color}33` }]}>
           {bgSrc ? (
-            <Image source={bgSrc} style={styles.bannerImg} resizeMode="contain" />
+            <Image source={bgSrc} style={styles.bannerImg} resizeMode="cover" />
           ) : item.image_url || item.banner_url || item.cover_url ? (
             <AuthedImage
               uri={item.image_url || item.banner_url || item.cover_url}
               style={styles.bannerImg}
-              resizeMode="contain"
+              resizeMode="cover"
             />
           ) : (
             <View style={[StyleSheet.absoluteFill, { backgroundColor: color }]} />
@@ -172,9 +172,9 @@ export default function EspacesScreen({ navigation }) {
 
           {/* Dark-to-transparent gradient at the bottom of the banner */}
           <LinearGradient
-            colors={['transparent', 'rgba(0,0,0,0.2)']}  // Light gradient
+            colors={['transparent', 'rgba(0,0,0,0.35)']}
             style={StyleSheet.absoluteFill}
-            start={{ x: 0, y: 0 }}
+            start={{ x: 0, y: 0.5 }}
             end={{ x: 0, y: 1 }}
           />
 
@@ -325,11 +325,12 @@ const styles = StyleSheet.create({
 
   /* â”€â”€ Top banner â”€â”€ */
   banner: {
-    height: 140,  // Increased for better JPEG display
+    height: 180,
     overflow: 'hidden',
   },
   bannerImg: {
-    ...StyleSheet.absoluteFillObject,
+    width: '100%',
+    height: '100%',
   },
 
   /* Visibility pill â€“ top-right of banner */
