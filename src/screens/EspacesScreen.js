@@ -159,12 +159,12 @@ export default function EspacesScreen({ navigation }) {
         {/* â”€â”€ Top banner with gradient overlay â”€â”€ */}
         <View style={[styles.banner, { borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl, backgroundColor: `${color}33` }]}>
           {bgSrc ? (
-            <Image source={bgSrc} style={styles.bannerImg} resizeMode="cover" />
+            <Image source={bgSrc} style={styles.bannerImg} resizeMode="contain" />
           ) : item.image_url || item.banner_url || item.cover_url ? (
             <AuthedImage
               uri={item.image_url || item.banner_url || item.cover_url}
               style={styles.bannerImg}
-              resizeMode="cover"
+              resizeMode="contain"
             />
           ) : (
             <View style={[StyleSheet.absoluteFill, { backgroundColor: color }]} />
@@ -172,7 +172,7 @@ export default function EspacesScreen({ navigation }) {
 
           {/* Dark-to-transparent gradient at the bottom of the banner */}
           <LinearGradient
-            colors={['transparent', 'rgba(0,0,0,0.55)']}
+            colors={['transparent', 'rgba(0,0,0,0.2)']}  // Light gradient
             style={StyleSheet.absoluteFill}
             start={{ x: 0, y: 0 }}
             end={{ x: 0, y: 1 }}
