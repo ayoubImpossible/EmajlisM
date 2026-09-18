@@ -35,8 +35,12 @@ function loadExtraCas() {
   if (explicit) {
     files.push(path.resolve(explicit));
   } else if (fs.existsSync(CA_DIR)) {
-    for (const name of fs.readdirSync(CA_DIR).sort()) {
-      if (/\.(pem|crt|cer)$/i.test(name)) files.push(path.join(CA_DIR, name));
+    try {
+      for (const name of fs.readdirSync(CA_DIR).sort()) {
+        if (/\.(pem|crt|cer)$/i.test(name)) files.push(path.join(CA_DIR, name));
+      }
+    } catch (_) {
+      // CA_DIR not accessible (e.g. Vercel serverless) — skip silently
     }
   }
 
