@@ -47,7 +47,12 @@ const app = express();
 const PORT = Number(process.env.PORT) || 3000;
 
 const UPLOAD_DIR = path.resolve(process.env.UPLOAD_DIR || './uploads');
-if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+// On Vercel/serverless the filesystem is read-only — skip directory creation
+try {
+  if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+} catch (_) {
+  // read-only filesystem (Vercel) — uploads not supported, skip silently
+}
 
 // â”€â”€ SÃ©curitÃ© â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 app.use(helmet({ crossOriginResourcePolicy: false }));
