@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+﻿import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, FlatList, TextInput, TouchableOpacity,
   RefreshControl, StyleSheet, Image,
@@ -13,14 +13,14 @@ import { messageFor } from '../api/client';
 import AuthedImage from '../components/common/AuthedImage';
 import { Screen, AppBar, Banner, EmptyState, SkeletonList } from '../components/ui';
 
-// ─── Local asset maps ────────────────────────────────────────────────────────
+// â”€â”€â”€ Local asset maps â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const BACKGROUNDS = {
-  8:  require('../../assets/Emajlis BackgroundV2/8.png'),
-  9:  require('../../assets/Emajlis BackgroundV2/9.png'),
-  10: require('../../assets/Emajlis BackgroundV2/10.png'),
-  11: require('../../assets/Emajlis BackgroundV2/11.png'),
-  12: require('../../assets/Emajlis BackgroundV2/12.png'),
-  13: require('../../assets/Emajlis BackgroundV2/13.png'),
+  8:  require('../../assets/Emajlis BackgroundV2/8.jpeg'),
+  9:  require('../../assets/Emajlis BackgroundV2/9.jpeg'),
+  10: require('../../assets/Emajlis BackgroundV2/10.jpeg'),
+  11: require('../../assets/Emajlis BackgroundV2/11.jpeg'),
+  12: require('../../assets/Emajlis BackgroundV2/12.jpeg'),
+  13: require('../../assets/Emajlis BackgroundV2/13.jpeg'),
   14: require('../../assets/Emajlis BackgroundV2/14.png'),
   15: require('../../assets/Emajlis BackgroundV2/15.png'),
   16: require('../../assets/Emajlis BackgroundV2/16.png'),
@@ -38,16 +38,16 @@ const ICONS = {
   16: require('../../assets/Emajlis icons V2/16.jpg'),
 };
 
-// Space name → { bg: number, icon: number }
+// Space name â†’ { bg: number, icon: number }
 // bg numbers map to Emajlis BackgroundV2/:
 //   8  = silhouettes at bright window (bureau/council)
-//   9  = illustrated round-table meeting (warm tones) — commissions CP*
-//  10  = red sketch two people at laptop — GSTFC
-//  11  = blurry audience from behind — not used currently
-//  12  = orange blurry media/screens — ressources documentaires
-//  13  = folded newspaper — revues de presse
-//  14  = blue floating documents/data — info doc / veille
-//  15  = plain light grey/white — le journal
+//   9  = illustrated round-table meeting (warm tones) â€” commissions CP*
+//  10  = red sketch two people at laptop â€” GSTFC
+//  11  = blurry audience from behind â€” not used currently
+//  12  = orange blurry media/screens â€” ressources documentaires
+//  13  = folded newspaper â€” revues de presse
+//  14  = blue floating documents/data â€” info doc / veille
+//  15  = plain light grey/white â€” le journal
 // Matching is done on normalised uppercase name (ignores accents/spaces variations)
 const SPACE_ASSETS = {
   'BUREAU DU CONSEIL':       { bg: 8,  icon: 9  },
@@ -70,12 +70,12 @@ function assetsFor(name = '') {
   const key = name.trim().toUpperCase();
   // exact match
   if (SPACE_ASSETS[key]) return SPACE_ASSETS[key];
-  // partial match — e.g. "L'INFO DOC" contains "INFO DOC"
+  // partial match â€” e.g. "L'INFO DOC" contains "INFO DOC"
   const found = Object.keys(SPACE_ASSETS).find((k) => key.includes(k) || k.includes(key));
   return found ? SPACE_ASSETS[found] : null;
 }
 
-// ─── Fallback helpers ─────────────────────────────────────────────────────────
+// â”€â”€â”€ Fallback helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Derive initials from a space name for the placeholder avatar
 function initials(name = '') {
   return name
@@ -107,7 +107,7 @@ export default function EspacesScreen({ navigation }) {
   const load = useCallback(async () => {
     try {
       const res = await getSpaces(1, 50);
-      // Deduplicate by id — the API can return the same space more than once
+      // Deduplicate by id â€” the API can return the same space more than once
       const raw = res?.results || [];
       const seen = new Set();
       const unique = raw.filter((s) => {
@@ -118,7 +118,7 @@ export default function EspacesScreen({ navigation }) {
       setSpaces(unique);
       setError(null);
     } catch (e) {
-      setError(messageFor(e, t('Impossible de charger les espaces.', 'تعذر تحميل الفضاءات.')));
+      setError(messageFor(e, t('Impossible de charger les espaces.', 'ØªØ¹Ø°Ø± ØªØ­Ù…ÙŠÙ„ Ø§Ù„ÙØ¶Ø§Ø¡Ø§Øª.')));
     } finally {
       setLoading(false); setRefreshing(false);
     }
@@ -156,7 +156,7 @@ export default function EspacesScreen({ navigation }) {
         accessibilityRole="button"
         accessibilityLabel={item.name}
       >
-        {/* ── Top banner with gradient overlay ── */}
+        {/* â”€â”€ Top banner with gradient overlay â”€â”€ */}
         <View style={[styles.banner, { borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl, backgroundColor: `${color}33` }]}>
           {bgSrc ? (
             <Image source={bgSrc} style={styles.bannerImg} resizeMode="cover" />
@@ -178,7 +178,7 @@ export default function EspacesScreen({ navigation }) {
             end={{ x: 0, y: 1 }}
           />
 
-          {/* Visibility pill – top-right */}
+          {/* Visibility pill â€“ top-right */}
           <View style={[
             styles.visibilityPill,
             { backgroundColor: isPrivate ? 'rgba(0,0,0,0.55)' : 'rgba(0,0,0,0.45)' },
@@ -189,11 +189,11 @@ export default function EspacesScreen({ navigation }) {
               color="#fff"
             />
             <Text style={styles.visibilityText}>
-              {isPrivate ? t('Privé', 'خاص') : t('Public', 'عام')}
+              {isPrivate ? t('PrivÃ©', 'Ø®Ø§Øµ') : t('Public', 'Ø¹Ø§Ù…')}
             </Text>
           </View>
 
-          {/* Member count – bottom-right */}
+          {/* Member count â€“ bottom-right */}
           {members != null ? (
             <View style={styles.membersBadge}>
               <Ionicons name="people" size={11} color="#fff" />
@@ -202,9 +202,9 @@ export default function EspacesScreen({ navigation }) {
           ) : null}
         </View>
 
-        {/* ── Body — icon floats here, overlapping the banner edge ── */}
+        {/* â”€â”€ Body â€” icon floats here, overlapping the banner edge â”€â”€ */}
         <View style={styles.bodyWrapper}>
-          {/* Circular icon – left side, negative top to overlap the banner */}
+          {/* Circular icon â€“ left side, negative top to overlap the banner */}
           {iconSrc ? (
             <View style={[styles.iconCircle, { borderColor: isDark ? colors.bgElevated : colors.bgCard }]}>
               <Image source={iconSrc} style={styles.iconImg} resizeMode="contain" />
@@ -233,10 +233,10 @@ export default function EspacesScreen({ navigation }) {
           </View>
         </View>
 
-        {/* ── Footer divider + arrow ── */}
+        {/* â”€â”€ Footer divider + arrow â”€â”€ */}
         <View style={[styles.cardFooter, { borderTopColor: colors.borderLight }]}>
           <Text style={[{ fontSize: 11, color: colors.textMuted }, dirStyle]}>
-            {t('Voir l\'espace', 'عرض الفضاء')}
+            {t('Voir l\'espace', 'Ø¹Ø±Ø¶ Ø§Ù„ÙØ¶Ø§Ø¡')}
           </Text>
           <Ionicons name="arrow-forward-circle-outline" size={18} color={colors.primary} />
         </View>
@@ -246,7 +246,7 @@ export default function EspacesScreen({ navigation }) {
 
   return (
     <Screen>
-      <AppBar title={t('Mes Espaces', 'فضاءاتي')} large />
+      <AppBar title={t('Mes Espaces', 'ÙØ¶Ø§Ø¡Ø§ØªÙŠ')} large />
 
       {/* Search bar */}
       <View style={[
@@ -263,7 +263,7 @@ export default function EspacesScreen({ navigation }) {
             style={[styles.searchInput, { color: colors.textPrimary }, dirStyle]}
             value={query}
             onChangeText={setQuery}
-            placeholder={t('Filtrer les espaces…', 'تصفية الفضاءات…')}
+            placeholder={t('Filtrer les espacesâ€¦', 'ØªØµÙÙŠØ© Ø§Ù„ÙØ¶Ø§Ø¡Ø§Øªâ€¦')}
             placeholderTextColor={colors.textMuted}
           />
           {query ? (
@@ -302,10 +302,10 @@ export default function EspacesScreen({ navigation }) {
               icon="grid-outline"
               title={
                 q
-                  ? t('Aucun espace ne correspond', 'لا يوجد فضاء مطابق')
-                  : t('Aucun espace', 'لا توجد فضاءات')
+                  ? t('Aucun espace ne correspond', 'Ù„Ø§ ÙŠÙˆØ¬Ø¯ ÙØ¶Ø§Ø¡ Ù…Ø·Ø§Ø¨Ù‚')
+                  : t('Aucun espace', 'Ù„Ø§ ØªÙˆØ¬Ø¯ ÙØ¶Ø§Ø¡Ø§Øª')
               }
-              actionTitle={q ? t('Effacer le filtre', 'مسح المرشح') : null}
+              actionTitle={q ? t('Effacer le filtre', 'Ù…Ø³Ø­ Ø§Ù„Ù…Ø±Ø´Ø­') : null}
               onAction={q ? () => setQuery('') : null}
             />
           }
@@ -318,21 +318,21 @@ export default function EspacesScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-  /* ── Card shell ── */
+  /* â”€â”€ Card shell â”€â”€ */
   card: {
     overflow: 'hidden',
   },
 
-  /* ── Top banner ── */
+  /* â”€â”€ Top banner â”€â”€ */
   banner: {
-    height: 110,
+    height: 140,  // Increased for better JPEG display
     overflow: 'hidden',
   },
   bannerImg: {
     ...StyleSheet.absoluteFillObject,
   },
 
-  /* Visibility pill – top-right of banner */
+  /* Visibility pill â€“ top-right of banner */
   visibilityPill: {
     position: 'absolute',
     top: 10,
@@ -351,7 +351,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.3,
   },
 
-  /* Member count – bottom-right of banner */
+  /* Member count â€“ bottom-right of banner */
   membersBadge: {
     position: 'absolute',
     bottom: 20,
@@ -370,7 +370,7 @@ const styles = StyleSheet.create({
     color: '#fff',
   },
 
-  /* Icon circle – pulls up to overlap the banner bottom edge */
+  /* Icon circle â€“ pulls up to overlap the banner bottom edge */
   iconCircle: {
     width: 44,
     height: 44,
@@ -380,7 +380,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
-    marginTop: -22,   // half its height — overlaps the banner
+    marginTop: -22,   // half its height â€” overlaps the banner
     marginLeft: 14,
     flexShrink: 0,
   },
@@ -395,21 +395,21 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
 
-  /* ── Body row (icon + text side by side) ── */
+  /* â”€â”€ Body row (icon + text side by side) â”€â”€ */
   bodyWrapper: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     paddingRight: 16,
     paddingBottom: 12,
   },
-  /* ── Text block next to the icon ── */
+  /* â”€â”€ Text block next to the icon â”€â”€ */
   body: {
     flex: 1,
     paddingLeft: 10,
     paddingTop: 6,
   },
 
-  /* ── Footer row ── */
+  /* â”€â”€ Footer row â”€â”€ */
   cardFooter: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -419,7 +419,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
 
-  /* ── Search bar ── */
+  /* â”€â”€ Search bar â”€â”€ */
   searchWrap: { paddingVertical: 8, borderBottomWidth: StyleSheet.hairlineWidth },
   searchBox: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, paddingVertical: 8 },
   searchInput: { flex: 1, fontSize: 13.5, padding: 0 },
