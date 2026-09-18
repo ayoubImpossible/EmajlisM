@@ -148,4 +148,5 @@ module.exports = {
   isEserviceManager,
   resolveHumHubUser,
   userCache,
+  managerCache,
 };

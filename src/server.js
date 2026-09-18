@@ -53,14 +53,11 @@ if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 app.use(helmet({ crossOriginResourcePolicy: false }));
 app.use(compression());
 
-// Periodic cache cleanup ï¿½ evicts expired entries every 10 minutes so RSS
-// stays bounded even if a cache is never queried after its entries expire.
+// Periodic cache cleanup - evicts expired entries every 10 minutes
 const { previewCache } = require('./services/enrich');
 const { userCache, managerCache } = require('./middleware/humhubAuth');
 
 setInterval(() => {
-  const { previewCache } = require('./services/enrich');
-  const { userCache, managerCache } = require('./middleware/humhubAuth');
   const { likesCache } = require('./controllers/social.controller');
   for (const cache of [previewCache, userCache, managerCache, likesCache]) {
     if (cache && typeof cache.cleanup === 'function') cache.cleanup();
