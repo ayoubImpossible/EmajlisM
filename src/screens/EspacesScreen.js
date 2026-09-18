@@ -15,12 +15,12 @@ import { Screen, AppBar, Banner, EmptyState, SkeletonList } from '../components/
 
 // â”€â”€â”€ Local asset maps â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const BACKGROUNDS = {
-  8:  require('../../assets/Emajlis BackgroundV2/8.jpeg'),
-  9:  require('../../assets/Emajlis BackgroundV2/9.jpeg'),
-  10: require('../../assets/Emajlis BackgroundV2/10.jpeg'),
-  11: require('../../assets/Emajlis BackgroundV2/11.jpeg'),
-  12: require('../../assets/Emajlis BackgroundV2/12.jpeg'),
-  13: require('../../assets/Emajlis BackgroundV2/13.jpeg'),
+  8:  require('../../assets/Emajlis BackgroundV2/8.png'),
+  9:  require('../../assets/Emajlis BackgroundV2/9.png'),
+  10: require('../../assets/Emajlis BackgroundV2/10.png'),
+  11: require('../../assets/Emajlis BackgroundV2/11.png'),
+  12: require('../../assets/Emajlis BackgroundV2/12.png'),
+  13: require('../../assets/Emajlis BackgroundV2/13.png'),
   14: require('../../assets/Emajlis BackgroundV2/14.png'),
   15: require('../../assets/Emajlis BackgroundV2/15.png'),
   16: require('../../assets/Emajlis BackgroundV2/16.png'),
